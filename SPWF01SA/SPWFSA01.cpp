@@ -61,6 +61,20 @@ bool SPWFSA01::startup(int mode)
             return false;
         }
 
+    /*set Wi-Fi mode and rate to b/g/n*/
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d\r",1) && _parser.recv("OK")))
+        {
+            debug_if(dbg_on, "SPWF> error setting ht_mode\r\n");
+            return false;
+        }
+        
+    /*set the operational rate*/
+    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF\r") && _parser.recv("OK")))
+        {
+            debug_if(dbg_on, "SPWF> error setting operational rates\r\n");
+            return false;
+        }
+
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d\r", mode) && _parser.recv("OK")))
         {
