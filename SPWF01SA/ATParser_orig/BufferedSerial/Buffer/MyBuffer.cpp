@@ -74,4 +74,3 @@ template class MyBuffer<uint64_t>;
 template class MyBuffer<int64_t>;
 template class MyBuffer<char>;
 template class MyBuffer<wchar_t>;
-

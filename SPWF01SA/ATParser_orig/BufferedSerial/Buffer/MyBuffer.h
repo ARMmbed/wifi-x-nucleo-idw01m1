@@ -161,4 +161,3 @@ inline uint32_t MyBuffer<T>::available(void)
 
 #endif
 
-

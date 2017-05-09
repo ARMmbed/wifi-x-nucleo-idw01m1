@@ -17,12 +17,15 @@
  * Parser for the AT command syntax
  *
  */
+#ifndef AT_PARSER_H
+#define AT_PARSER_H
 
 #include "mbed.h"
 #include <cstdarg>
 #include <vector>
 #include "BufferedSerial.h"
 #include "Callback.h"
+
 
 /**
 * Parser class for parsing AT commands
@@ -229,5 +232,4 @@ public:
     */
     void flush();
 };
-
-
+#endif

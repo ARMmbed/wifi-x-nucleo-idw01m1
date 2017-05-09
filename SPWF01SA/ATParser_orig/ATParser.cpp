@@ -21,6 +21,7 @@
 #include "ATParser.h"
 #include "mbed_debug.h"
 
+
 // getc/putc handling with timeouts
 int ATParser::putc(char c)
 {
@@ -254,7 +255,7 @@ bool ATParser::vrecv(const char *response, va_list args)
 
                     // oob may have corrupted non-reentrant buffer,
                     // so we need to set it up again
-                    return vrecv(response, args);
+                    return vrecv(response, args); // betzw: recursion really needed (why not using `goto` to function entry)?
                 }
             }
 
@@ -359,6 +360,7 @@ bool ATParser::recv(const char *response, ...)
     return res;
 }
 
+
 // oob registration
 void ATParser::oob(const char *prefix, Callback<void()> cb)
 {
@@ -368,4 +370,3 @@ void ATParser::oob(const char *prefix, Callback<void()> cb)
     oob.cb = cb;
     _oobs.push_back(oob);
 }
-

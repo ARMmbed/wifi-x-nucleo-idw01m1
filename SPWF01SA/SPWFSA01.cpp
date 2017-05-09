@@ -90,8 +90,8 @@ bool SPWFSA01::startup(int mode)
         }
 
     _parser.oob("+WIND:55:", this, &SPWFSA01::_packet_handler);
-		_parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
-		//_parser.oob("+WIND:58:", this, &SPWFSA01::sock_disconnected);
+	_parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
+	//_parser.oob("+WIND:58:", this, &SPWFSA01::sock_disconnected);
 
     /*reset again and send AT command and check for result (AT->OK)*/
     reset();
@@ -138,25 +138,25 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
 {
     uint32_t n1, n2, n3, n4;
 
-    //AT+S.SCFG=wifi_wpa_psk_text,%s\r
+    //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _parser.recv("OK"))) 
         {
             debug_if(dbg_on, "SPWF> error pass set\r\n");
             return false;
         } 
-    //AT+S.SSIDTXT=%s\r
+    //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _parser.recv("OK"))) 
         {
             debug_if(dbg_on, "SPWF> error ssid set\r\n");
             return false;
         }
-    //AT+S.SCFG=wifi_priv_mode,%d\r
+    //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _parser.recv("OK"))) 
         {
             debug_if(dbg_on, "SPWF> error security mode set\r\n");
             return false;
         } 
-    //"AT+S.SCFG=wifi_mode,%d\r"
+    //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1) && _parser.recv("OK")))
         {
@@ -184,7 +184,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
 
 bool SPWFSA01::disconnect(void)
 {
-    //"AT+S.SCFG=wifi_mode,%d\r"
+    //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 0) && _parser.recv("OK")))
         {
@@ -224,7 +224,7 @@ const char *SPWFSA01::getIPAddress(void)
         && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u", &n1, &n2, &n3, &n4)
         && _parser.recv("OK"))) {
             debug_if(dbg_on, "SPWF> getIPAddress error\r\n");
-        return 0;
+            return 0;
     }
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
@@ -240,7 +240,7 @@ const char *SPWFSA01::getMACAddress(void)
         && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x", &n1, &n2, &n3, &n4, &n5, &n6)
         && _parser.recv("OK"))) {
             debug_if(dbg_on, "SPWF> getMACAddress error\r\n");
-        return 0;
+            return 0;
     }
 
     sprintf((char*)_mac_buffer,"%02X:%02X:%02X:%02X:%02X:%02X", n1, n2, n3, n4, n5, n6);
@@ -453,7 +453,7 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
         // check if any packets are ready for us
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == id) {
-								debug_if(dbg_on,"\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
+				debug_if(dbg_on,"\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
