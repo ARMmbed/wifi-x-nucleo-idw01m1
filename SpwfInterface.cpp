@@ -555,7 +555,7 @@ int SpwfSAInterface::set_channel(uint8_t channel)
 
 int8_t SpwfSAInterface::get_rssi()
 {
-		return NSAPI_ERROR_UNSUPPORTED;
+		return (int8_t)NSAPI_ERROR_UNSUPPORTED;
 }
 
 int SpwfSAInterface::connect()

@@ -246,8 +246,8 @@ bool ATParser::vrecv(const char *response, va_list args)
             _buffer[offset + j] = 0;
 
 			// Check for oob data
-            for (int k = 0; k < _oobs.size(); k++) {
-                if (j == _oobs[k].len && memcmp(
+            for (unsigned int k = 0; k < _oobs.size(); k++) {
+                if (j == (int)_oobs[k].len && memcmp(
                         _oobs[k].prefix, _buffer+offset, _oobs[k].len) == 0) {
                     debug_if(dbg_on, "AT! %s\r\n", _oobs[k].prefix);
                     _oobs[k].cb();

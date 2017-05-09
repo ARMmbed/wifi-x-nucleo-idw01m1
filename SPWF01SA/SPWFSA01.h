@@ -177,17 +177,17 @@ private:
         uint32_t len;
         // data follows
     } *_packets, **_packets_end;
+
     void _packet_handler();
-		void _error_handler();
-		void sock_disconnected();
+	void _error_handler();
+	void sock_disconnected();
     
     char _ip_buffer[16];
     char _mac_buffer[18];
     bool dbg_on;
-		bool data_pending;
-		bool sock_close_ongoing;
-		int socket_close_id;
-		
+	bool data_pending;
+	bool sock_close_ongoing;
+	int socket_close_id;
 };
  
 #endif  //SPWFSA01_H

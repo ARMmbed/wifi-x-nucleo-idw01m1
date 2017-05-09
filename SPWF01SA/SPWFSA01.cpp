@@ -24,8 +24,8 @@
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
     : _serial(tx, rx, 2048), _parser(_serial),
-	    _packets(0), _packets_end(&_packets),
       _wakeup(D14, PIN_INPUT, PullNone, 0), _reset(D15, PIN_INPUT, PullNone, 1),
+	  _packets(0), _packets_end(&_packets),
       //PC_12->D15, PC_8->D14 (re-wires needed in-case used, currently not used)
       dbg_on(debug)
       //Pin PC_8 is wakeup pin
@@ -35,8 +35,8 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
     _reset.output();
     _wakeup.output();
     _parser.debugOn(debug);
-		data_pending = false;
-		socket_close_id = 9;
+	data_pending = false;
+	socket_close_id = 9;
 }
 
 bool SPWFSA01::startup(int mode)
@@ -218,7 +218,7 @@ bool SPWFSA01::dhcp(int mode)
 
 const char *SPWFSA01::getIPAddress(void)
 {
-    uint32_t n1, n2, n3, n4;
+    unsigned int n1, n2, n3, n4;
     
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
         && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u", &n1, &n2, &n3, &n4)
@@ -234,7 +234,7 @@ const char *SPWFSA01::getIPAddress(void)
 
 const char *SPWFSA01::getMACAddress(void)
 {
-    uint32_t n1, n2, n3, n4, n5, n6;
+    unsigned int n1, n2, n3, n4, n5, n6;
     
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
         && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x", &n1, &n2, &n3, &n4, &n5, &n6)
@@ -305,7 +305,7 @@ bool SPWFSA01::send(int id, const void *data, uint32_t amount)
 
     setTimeout(SPWFSA01_SEND_TIMEOUT);
 
-    sprintf((char*)_buf,"AT+S.SOCKW=%d,%d\r", id, amount);   
+    sprintf((char*)_buf,"AT+S.SOCKW=%d,%d\r", id, (unsigned int)amount);
     debug_if(dbg_on, "SPWF> SOCKW\r\n");
     //May take a second try if device is busy
     for (unsigned i = 0; i < 2; i++) {
@@ -446,8 +446,8 @@ void SPWFSA01::_packet_handler()
 int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
 {
 	Timer timer;
-  timer.start();
-	bool _timeout = false;
+	timer.start();
+	// bool _timeout = false;
 	
 	while (true) {
         // check if any packets are ready for us
@@ -645,7 +645,7 @@ bool SPWFSA01::close(int id)
 									debug_if(true,"\r\n After removing data \r\n");
 									if (_packets_end == &(*p)->next)
                         _packets_end = p;
-                    //*p = (*p)->next;
+                    // *p = (*p)->next;
                     free(q);
 									debug_if(true,"\r\n Packet free !! \r\n");
 								}
