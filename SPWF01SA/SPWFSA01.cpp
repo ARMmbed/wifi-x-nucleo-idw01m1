@@ -49,7 +49,7 @@ bool SPWFSA01::startup(int mode)
     reset();
      
     /*set local echo to 0*/
-    if(!(_parser.send("AT+S.SCFG=localecho1,%d\r", 0) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=localecho1,%d", 0) && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error local echo set\r\n");
             return false;
@@ -62,21 +62,21 @@ bool SPWFSA01::startup(int mode)
         }
 
     /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d\r",1) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d",1) && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error setting ht_mode\r\n");
             return false;
         }
         
     /*set the operational rate*/
-    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF\r") && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error setting operational rates\r\n");
             return false;
         }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d\r", mode) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
             return false;
@@ -113,7 +113,7 @@ bool SPWFSA01::reset(void)
 {
     if(!_parser.send("AT+CFUN=1")) return false;
     while(1) {
-        if (_parser.recv("+WIND:32:WiFi Hardware Started\r")) {
+        if (_parser.recv("+WIND:32:WiFi Hardware Started")) {
             return true;
         }
     }
@@ -158,7 +158,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
         } 
     //"AT+S.SCFG=wifi_mode,%d\r"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d\r", 1) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1) && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
             return false;
@@ -186,7 +186,7 @@ bool SPWFSA01::disconnect(void)
 {
     //"AT+S.SCFG=wifi_mode,%d\r"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d\r", 0) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 0) && _parser.recv("OK")))
         {
             debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
             return false;
@@ -211,7 +211,7 @@ bool SPWFSA01::dhcp(int mode)
         return false;
     }
         
-    return _parser.send("AT+S.SCFG=ip_use_dhcp,%d\r", mode)
+    return _parser.send("AT+S.SCFG=ip_use_dhcp,%d", mode)
         && _parser.recv("OK");
 }
 
