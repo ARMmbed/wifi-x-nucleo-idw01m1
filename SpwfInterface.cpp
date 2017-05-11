@@ -53,44 +53,44 @@ struct spwf_socket {
 };
 
 /**
-* @brief  SpwfSAInterface constructor         
-* @param  tx: Pin USART TX  
-*         rx: Pin USART RX
-*         rst: reset pin for Spwf module
-*         wkup: reset pin for Spwf module
-*         rts: Pin USART RTS
-*         debug : not used
-* @retval none
-*/
+ * @brief  SpwfSAInterface constructor
+ * @param  tx: Pin USART TX
+ *         rx: Pin USART RX
+ *         rst: reset pin for Spwf module
+ *         wkup: reset pin for Spwf module
+ *         rts: Pin USART RTS
+ *         debug : not used
+ * @retval none
+ */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-    : _spwf(tx, rx, debug),
-			dbg_on(debug)
+: _spwf(tx, rx, debug),
+  dbg_on(debug)
 {
     memset(_ids, 0, sizeof(_ids));
-		memset(_cbs, 0, sizeof(_cbs));
-		memset(_interim_cb , 0, sizeof(_interim_cb));
+    memset(_cbs, 0, sizeof(_cbs));
+    memset(_interim_cb , 0, sizeof(_interim_cb));
 
-	  _spwf.attach(this, &SpwfSAInterface::event);
+    _spwf.attach(this, &SpwfSAInterface::event);
 
-	  isInitialized = false;
+    isInitialized = false;
     isListening = false;
 }
 
 /**
-* @brief  SpwfSAInterface destructor         
-* @param  none
-* @retval none
-*/
+ * @brief  SpwfSAInterface destructor
+ * @param  none
+ * @retval none
+ */
 SpwfSAInterface::~SpwfSAInterface()
 {
 }
 
 /**
-* @brief  init function
-          initializes SPWF FW and module         
-* @param  none
-* @retval error value
-*/
+ * @brief  init function
+ *         initializes SPWF FW and module
+ * @param  none
+ * @retval error value
+ */
 int SpwfSAInterface::init(void) 
 {
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
@@ -102,17 +102,17 @@ int SpwfSAInterface::init(void)
 }
 
 /**
-* @brief  network connect
-          connects to Access Point
-* @param  ap: Access Point (AP) Name String  
-*         pass_phrase: Password String for AP
-*         security: type of NSAPI security supported
-* @retval NSAPI Error Type
-*/
+ * @brief  network connect
+ *        connects to Access Point
+ * @param  ap: Access Point (AP) Name String
+ *         pass_phrase: Password String for AP
+ *         security: type of NSAPI security supported
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::connect(const char *ap, 
                              const char *pass_phrase, 
                              nsapi_security_t security,
-														 uint8_t channel)
+                             uint8_t channel)
 {
     int mode;
 
@@ -146,60 +146,60 @@ int SpwfSAInterface::connect(const char *ap,
 }
 
 /**
-* @brief  network disconnect
-          disconnects from Access Point
-* @param  none
-* @retval NSAPI Error Type
-*/
+ * @brief  network disconnect
+ *         disconnects from Access Point
+ * @param  none
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::disconnect()
 {
     return (_spwf.disconnect());
 }
 
 /** 
-* @brief  Get the local IP address
-* @param  none
-* @retval Null-terminated representation of the local IP address
-*         or null if not yet connected
-*/
+ * @brief  Get the local IP address
+ * @param  none
+ * @retval Null-terminated representation of the local IP address
+ *         or null if not yet connected
+ */
 const char *SpwfSAInterface::get_ip_address()
 {
     return _spwf.getIPAddress();
 }
 
 /** 
-* @brief  Get the MAC address
-* @param  none
-* @retval Null-terminated representation of the MAC address
-*         or null if not yet connected
-*/
+ * @brief  Get the MAC address
+ * @param  none
+ * @retval Null-terminated representation of the MAC address
+ *         or null if not yet connected
+ */
 const char *SpwfSAInterface::get_mac_address()
 {
     return _spwf.getMACAddress();
 }
 
 /**
-* @brief  open a socket handle
-* @param  handle: Pointer to handle
-*         proto: TCP/UDP protocol
-* @retval NSAPI Error Type
-*/
+ * @brief  open a socket handle
+ * @param  handle: Pointer to handle
+ *         proto: TCP/UDP protocol
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
     int id = -1;
-		// id won't have -1 value now
-		for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
+    // id won't have -1 value now
+    for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
         if (!_ids[i]) {
             id = i;
             _ids[i] = true;
-						debug_if(dbg_on, "\r\nSocket open with id = %d \r\n",i);
+            debug_if(dbg_on, "\r\nSocket open with id = %d \r\n",i);
             break;
         }
     }
 
     struct spwf_socket *socket = new struct spwf_socket;
     if (!socket) {
-				debug_if(dbg_on, "NO Socket Error\r\n");
+        debug_if(dbg_on, "NO Socket Error\r\n");
         return NSAPI_ERROR_NO_SOCKET;
     }
 
@@ -212,11 +212,11 @@ int SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 }
 
 /**
-* @brief  connect to a remote socket
-* @param  handle: Pointer to socket handle
-*         addr: Address to connect to
-* @retval NSAPI Error Type
-*/
+ * @brief  connect to a remote socket
+ * @param  handle: Pointer to socket handle
+ *         addr: Address to connect to
+ * @retval NSAPI Error Type
+ */
 
 /*
 int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
@@ -276,7 +276,7 @@ int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 
     return 0;
 }
-*/
+ */
 
 int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 {
@@ -284,41 +284,41 @@ int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
     struct spwf_socket *socket = (struct spwf_socket *)handle;
 
     const char *proto = (socket->proto == NSAPI_UDP) ? "u" : "t";//"s" for secure socket?
-		
-		// do we need callback before connectng the socket ?
-		//_cbs[socket->id].callback = _interim_cb[socket->id].callback;
-		//_cbs[socket->id].data 		= _interim_cb[socket->id].data;
+
+    // do we need callback before connectng the socket ?
+    //_cbs[socket->id].callback = _interim_cb[socket->id].callback;
+    //_cbs[socket->id].data 		= _interim_cb[socket->id].data;
 
     if (!_spwf.open(proto, &sock_id, addr.get_ip_address(), addr.get_port())) {	//sock ID is allocated NOW
         return NSAPI_ERROR_DEVICE_ERROR;
     }
-		addrs[sock_id] = addr;
-		
-		socket->connected = true;
-		//if we have above callback
+    addrs[sock_id] = addr;
+
+    socket->connected = true;
+    //if we have above callback
 #if 0
-		if(socket->id != sock_id)
-		{
-				_cbs[sock_id].callback = _interim_cb[socket->id].callback;
-				_cbs[sock_id].data     = _interim_cb[socket->id].data;
-				_cbs[socket->id].callback		= 0;
-				_cbs[socket->id].data       = 0;
-				_ids[socket->id]			 = false;
-				_ids[sock_id]          = true;
-				socket->id						 = sock_id;
-		}
+    if(socket->id != sock_id)
+    {
+        _cbs[sock_id].callback = _interim_cb[socket->id].callback;
+        _cbs[sock_id].data     = _interim_cb[socket->id].data;
+        _cbs[socket->id].callback		= 0;
+        _cbs[socket->id].data       = 0;
+        _ids[socket->id]			 = false;
+        _ids[sock_id]          = true;
+        socket->id						 = sock_id;
+    }
 #endif
-		
+
 #if 1
-		// if we don't have above callback
-		_cbs[sock_id].callback = _interim_cb[socket->id].callback;
-		_cbs[sock_id].data     = _interim_cb[socket->id].data;
-		_ids[sock_id]    			 = true;
-		if(socket->id != sock_id)
-		{
-			_ids[socket->id] = false;
-			socket->id 			 = sock_id;
-		}
+    // if we don't have above callback
+    _cbs[sock_id].callback = _interim_cb[socket->id].callback;
+    _cbs[sock_id].data     = _interim_cb[socket->id].data;
+    _ids[sock_id]    			 = true;
+    if(socket->id != sock_id)
+    {
+        _ids[socket->id] = false;
+        socket->id 			 = sock_id;
+    }
 #endif
 
     //TODO: Maintain a socket table to map socket ID to host & port
@@ -330,11 +330,11 @@ int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 
 
 /**
-* @brief  bind to a port number and address
-* @param  handle: Pointer to socket handle
-*         proto: address to bind to
-* @retval NSAPI Error Type
-*/
+ * @brief  bind to a port number and address
+ * @param  handle: Pointer to socket handle
+ *         proto: address to bind to
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::socket_bind(void *handle, const SocketAddress &address)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;    
@@ -343,65 +343,65 @@ int SpwfSAInterface::socket_bind(void *handle, const SocketAddress &address)
 }
 
 /**
-* @brief  start listening on a port and address
-* @param  handle: Pointer to handle
-*         backlog: not used (always value is 1)
-* @retval NSAPI Error Type
-*/
+ * @brief  start listening on a port and address
+ * @param  handle: Pointer to handle
+ *         backlog: not used (always value is 1)
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::socket_listen(void *handle, int backlog)
 {      
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
 /**
-* @brief  accept connections from remote sockets
-* @param  handle: Pointer to handle of client socket (connecting)
-*         proto: handle of server socket which will accept connections
-* @retval NSAPI Error Type
-*/
+ * @brief  accept connections from remote sockets
+ * @param  handle: Pointer to handle of client socket (connecting)
+ *         proto: handle of server socket which will accept connections
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address)
 {    
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
 /**
-* @brief  close a socket
-* @param  handle: Pointer to handle
-* @retval NSAPI Error Type
-*/
+ * @brief  close a socket
+ * @param  handle: Pointer to handle
+ * @retval NSAPI Error Type
+ */
 int SpwfSAInterface::socket_close(void *handle)
 {
-	int err = 0;
-	struct spwf_socket *socket = (struct spwf_socket *)handle;
-	if(socket->id != SERVER_SOCKET_NO && _ids[socket->id]) {
-	  debug_if(dbg_on,"\r\n SpwfSAInterface::socket_close \r\n");
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    int err = 0;
+    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    if(socket->id != SERVER_SOCKET_NO && _ids[socket->id]) {
+        debug_if(dbg_on,"\r\n SpwfSAInterface::socket_close \r\n");
+        _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
-    if(socket->id != -1) {
-        if (_spwf.close(socket->id)) {
-            if(socket->id==SERVER_SOCKET_NO)
-                isListening = false;
-            else {
-                _ids[socket->id] = false;
-								addrs[socket->id] = 0;
-								//memset(addrs[socket->id],0x00,sizeof(addrs[socket->id]));
-						}
+        if(socket->id != -1) {
+            if (_spwf.close(socket->id)) {
+                if(socket->id==SERVER_SOCKET_NO)
+                    isListening = false;
+                else {
+                    _ids[socket->id] = false;
+                    addrs[socket->id] = 0;
+                    //memset(addrs[socket->id],0x00,sizeof(addrs[socket->id]));
+                }
+            }
+            else err = NSAPI_ERROR_DEVICE_ERROR;
         }
-        else err = NSAPI_ERROR_DEVICE_ERROR;
     }
-	}
 
-  delete socket;
-  return err;
+    delete socket;
+    return err;
 }
 
 /**
-* @brief  write to a socket
-* @param  handle: Pointer to handle
-*         data: pointer to data
-*         size: size of data
-* @retval no of bytes sent
-*/
+ * @brief  write to a socket
+ * @param  handle: Pointer to handle
+ *         data: pointer to data
+ *         size: size of data
+ * @retval no of bytes sent
+ */
 int SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
@@ -425,12 +425,12 @@ int SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 }
 
 /**
-* @brief  receive data on a socket
-* @param  handle: Pointer to handle
-*         data: pointer to data
-*         size: size of data
-* @retval no of bytes read
-*/
+ * @brief  receive data on a socket
+ * @param  handle: Pointer to handle
+ *         data: pointer to data
+ *         size: size of data
+ * @retval no of bytes read
+ */
 int SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
@@ -440,7 +440,7 @@ int SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 
     //CHECK:Receive for both Client and Server Sockets same?
     recv = _spwf.recv(socket->id, (char*)data, (uint32_t)size); 
-		//debug_if(true,"\r\n recv = %d \r\n",recv);
+    //debug_if(true,"\r\n recv = %d \r\n",recv);
     if (recv < 0) {
         //wait_ms(1);//delay of 1ms <for F4>??
         //printf(".");
@@ -451,13 +451,13 @@ int SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 }
 
 /**
-* @brief  send data to a udp socket
-* @param  handle: Pointer to handle
-*         addr: address of udp socket
-*         data: pointer to data
-*         size: size of data
-* @retval no of bytes sent
-*/
+ * @brief  send data to a udp socket
+ * @param  handle: Pointer to handle
+ *         addr: address of udp socket
+ *         data: pointer to data
+ *         size: size of data
+ * @retval no of bytes sent
+ */
 int SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
@@ -471,31 +471,31 @@ int SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, cons
 }
 
 /**
-* @brief  receive data on a udp socket
-* @param  handle: Pointer to handle
-*         addr: address of udp socket
-*         data: pointer to data
-*         size: size of data
-* @retval no of bytes read
-*/
+ * @brief  receive data on a udp socket
+ * @param  handle: Pointer to handle
+ *         addr: address of udp socket
+ *         data: pointer to data
+ *         size: size of data
+ * @retval no of bytes read
+ */
 int SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
-	  int32_t recv;
+    int32_t recv;
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-		struct SocketAddress *address = (struct SocketAddress *)addr;
-		recv = socket_recv(socket, data, size);
-		if(recv > 0)
-				*address = addrs[socket->id];
+    struct SocketAddress *address = (struct SocketAddress *)addr;
+    recv = socket_recv(socket, data, size);
+    if(recv > 0)
+        *address = addrs[socket->id];
     return recv;
 }
 
 /**
-* @brief  attach function/callback to the socket
-* @param  handle: Pointer to handle
-*         callback: callback function pointer
-*         data: pointer to data
-* @retval none
-*/
+ * @brief  attach function/callback to the socket
+ * @param  handle: Pointer to handle
+ *         callback: callback function pointer
+ *         data: pointer to data
+ * @retval none
+ */
 /*
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
@@ -504,18 +504,18 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
     _cbs[socket->id].callback = callback;
     _cbs[socket->id].data = data;   
 }
-*/
+ */
 
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-		if(!callback) {
-			set_cbs(socket->id,callback,data);
-		}
-		else {
-			_interim_cb[socket->id].callback = callback;
-			_interim_cb[socket->id].data = data;
-		}
+    if(!callback) {
+        set_cbs(socket->id,callback,data);
+    }
+    else {
+        _interim_cb[socket->id].callback = callback;
+        _interim_cb[socket->id].data = data;
+    }
 }
 
 void SpwfSAInterface::event(void) {
@@ -528,15 +528,15 @@ void SpwfSAInterface::event(void) {
 
 void SpwfSAInterface::set_cbs(int id,void (*callback)(void *),void *data)
 {
-	_cbs[id].callback = callback;
-	_cbs[id].data			= data;
+    _cbs[id].callback = callback;
+    _cbs[id].data			= data;
 }
 
 /**
-* @brief  utility debug function for printing to serial terminal
-* @param  string: Pointer to data
-* @retval none
-*/
+ * @brief  utility debug function for printing to serial terminal
+ * @param  string: Pointer to data
+ * @retval none
+ */
 void SpwfSAInterface::debug(const char * string)
 {
     //_spwf.debug_print(string);
@@ -544,28 +544,26 @@ void SpwfSAInterface::debug(const char * string)
 
 int SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security) //not supported
 {
-		return NSAPI_ERROR_UNSUPPORTED;
+    return NSAPI_ERROR_UNSUPPORTED;
 }
 
 
 int SpwfSAInterface::set_channel(uint8_t channel)
 {
-		return NSAPI_ERROR_UNSUPPORTED;
+    return NSAPI_ERROR_UNSUPPORTED;
 }
 
 int8_t SpwfSAInterface::get_rssi()
 {
-		return (int8_t)NSAPI_ERROR_UNSUPPORTED;
+    return (int8_t)NSAPI_ERROR_UNSUPPORTED;
 }
 
 int SpwfSAInterface::connect()
 {
-		return NSAPI_ERROR_UNSUPPORTED;
+    return NSAPI_ERROR_UNSUPPORTED;
 }
 
 int SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
-		return NSAPI_ERROR_UNSUPPORTED;
+    return NSAPI_ERROR_UNSUPPORTED;
 }
-
-
