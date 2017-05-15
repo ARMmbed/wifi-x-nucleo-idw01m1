@@ -38,10 +38,10 @@
 
 #include "mbed.h"
 #include "SPWFSA01.h"
- 
+
 #define SPWFSA_SOCKET_COUNT 8
 #define SERVER_SOCKET_NO    9
- 
+
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
  */
@@ -51,17 +51,17 @@ public:
 
     SpwfSAInterface(PinName tx, PinName rx, bool debug = false);
     virtual     ~SpwfSAInterface();
- 
+
     // Implementation of WiFiInterface
     virtual     int connect(const char *ssid,
                             const char *pass,
                             nsapi_security_t security = NSAPI_SECURITY_NONE,
-														uint8_t channel = 0);
+                            uint8_t channel = 0);
 
     virtual     int disconnect();    
     virtual     const char *get_mac_address();
     void        debug(const char * string);
-		void 				set_cbs(int id,void (*callback)(void *),void *data);			
+    void 				set_cbs(int id,void (*callback)(void *),void *data);
 
     //Implementation of NetworkStack
     virtual     const char *get_ip_address();
@@ -74,18 +74,18 @@ protected:
     virtual     int socket_listen(void *handle, int backlog);
     virtual     int socket_connect(void *handle, const SocketAddress &address);
     //virtual     int socket_accept(nsapi_socket_t server, void **handle);
-		virtual			int socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address=0);  // not supported
+    virtual			int socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address=0);  // not supported
     virtual     int socket_send(void *handle, const void *data, unsigned size);
     virtual     int socket_recv(void *handle, void *data, unsigned size);
     virtual     int socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size);
     virtual     int socket_recvfrom(void *handle, SocketAddress *address, void *buffer, unsigned size);
     virtual     void socket_attach(void *handle, void (*callback)(void *), void *data);
-		/* WiFiInterface */
-		virtual 		int set_credentials(const char *ssid, const char *pass, nsapi_security_t security = NSAPI_SECURITY_NONE); //not supported
-		virtual 		int set_channel(uint8_t channel);
-		virtual 		int8_t get_rssi();
-		virtual 		int connect();
-		virtual 		int scan(WiFiAccessPoint *res, unsigned count);
+    /* WiFiInterface */
+    virtual 		int set_credentials(const char *ssid, const char *pass, nsapi_security_t security = NSAPI_SECURITY_NONE); //not supported
+    virtual 		int set_channel(uint8_t channel);
+    virtual 		int8_t get_rssi();
+    virtual 		int connect();
+    virtual 		int scan(WiFiAccessPoint *res, unsigned count);
 
 
     virtual NetworkStack *get_stack()
@@ -97,20 +97,20 @@ private:
     int         init(void);
 
     SPWFSA01 _spwf;
-		SocketAddress addrs[8];
+    SocketAddress addrs[8];
     bool _ids[SPWFSA_SOCKET_COUNT];
     bool isListening;
     bool isInitialized;
-		bool dbg_on;
+    bool dbg_on;
 
     void event(void);
     struct {
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
-		
-		//temporary callback data
-		struct {
+
+    //temporary callback data
+    struct {
         void (*callback)(void *);
         void *data;
     } _interim_cb[SPWFSA_SOCKET_COUNT];

@@ -23,7 +23,7 @@
 //#define SPWFSA01_MISC_TIMEOUT    500
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
-    : _serial(tx, rx, 2048), _parser(_serial, "\r"),
+    : _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
       _wakeup(D14, PIN_INPUT, PullNone, 0), _reset(D15, PIN_INPUT, PullNone, 1),
       _packets(0), _packets_end(&_packets),
       //PC_12->D15, PC_8->D14 (re-wires needed in-case used, currently not used)
@@ -49,41 +49,41 @@ bool SPWFSA01::startup(int mode)
     reset();
 
     /*set local echo to 0*/
-    if(!(_parser.send("AT+S.SCFG=localecho1,%d", 0) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=localecho1,%d", 0) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error local echo set\r\n");
         return false;
     }
     /*reset factory settings*/
-    if(!(_parser.send("AT&F") && _parser.recv("OK"))) 
+    if(!(_parser.send("AT&F") && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error AT&F\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d",1) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d",1) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error setting ht_mode\r\n");
         return false;
     }
 
     /*set the operational rate*/
-    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error setting operational rates\r\n");
         return false;
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
 
     /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK")))
+    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error AT&W\r\n");
         return false;
@@ -113,7 +113,7 @@ bool SPWFSA01::reset(void)
 {
     if(!_parser.send("AT+CFUN=1")) return false;
     while(1) {
-        if (_parser.recv("+WIND:32:WiFi Hardware Started")) {
+        if (_parser.recv("+WIND:32:WiFi Hardware Started\r")) {
             return true;
         }
     }
@@ -123,7 +123,7 @@ void SPWFSA01::waitSPWFReady(void)
 {
     //wait_ms(200);
     while(1)
-        if(_parser.send("AT") && _parser.recv("OK"))
+        if(_parser.send("AT") && _parser.recv("OK\r"))
             //till we get OK from AT command
             //printf("\r\nwaiting for reset to complete..\n");
             return;
@@ -139,33 +139,33 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     uint32_t n1, n2, n3, n4;
 
     //AT+S.SCFG=wifi_wpa_psk_text,%s
-    if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _parser.recv("OK"))) 
+    if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error pass set\r\n");
         return false;
     } 
     //AT+S.SSIDTXT=%s
-    if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _parser.recv("OK"))) 
+    if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error ssid set\r\n");
         return false;
     }
     //AT+S.SCFG=wifi_priv_mode,%d
-    if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _parser.recv("OK"))) 
+    if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error security mode set\r\n");
         return false;
     } 
     //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
     //AT&W
     /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK")))
+    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error AT&W\r\n");
         return false;
@@ -174,7 +174,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     reset();
 
     while(1)
-        if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u",&n1, &n2, &n3, &n4)))
+        if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)))
         {
             break;
         }
@@ -186,14 +186,14 @@ bool SPWFSA01::disconnect(void)
 {
     //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 0) && _parser.recv("OK")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 0) && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
     //AT&W
     /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK")))
+    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
     {
         debug_if(dbg_on, "SPWF> error AT&W\r\n");
         return false;
@@ -212,7 +212,7 @@ bool SPWFSA01::dhcp(int mode)
     }
 
     return _parser.send("AT+S.SCFG=ip_use_dhcp,%d", mode)
-            && _parser.recv("OK");
+            && _parser.recv("OK\r");
 }
 
 
@@ -221,8 +221,8 @@ const char *SPWFSA01::getIPAddress(void)
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
-            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u", &n1, &n2, &n3, &n4)
-            && _parser.recv("OK"))) {
+            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\r", &n1, &n2, &n3, &n4)
+            && _parser.recv("OK\r"))) {
         debug_if(dbg_on, "SPWF> getIPAddress error\r\n");
         return 0;
     }
@@ -237,8 +237,8 @@ const char *SPWFSA01::getMACAddress(void)
     unsigned int n1, n2, n3, n4, n5, n6;
 
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
-            && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x", &n1, &n2, &n3, &n4, &n5, &n6)
-            && _parser.recv("OK"))) {
+            && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r", &n1, &n2, &n3, &n4, &n5, &n6)
+            && _parser.recv("OK\r"))) {
         debug_if(dbg_on, "SPWF> getMACAddress error\r\n");
         return 0;
     }
@@ -267,8 +267,8 @@ bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
 
     while(1)
     {
-        if( _parser.recv(" ID: %d", id)
-                && _parser.recv("OK"))
+        if( _parser.recv(" ID: %d\r", id)
+                && _parser.recv("OK\r"))
             break;
 
         if (timer.read_ms() > SPWFSA01_CONNECT_TIMEOUT) {
@@ -309,7 +309,7 @@ bool SPWFSA01::send(int id, const void *data, uint32_t amount)
     for (unsigned i = 0; i < 2; i++) {
         if (_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)amount)
                 && (_parser.write((char*)data, (int)amount) == (int)amount)
-                && _parser.recv("OK")) {
+                && _parser.recv("OK\r")) {
             return true;
         }
     }
@@ -325,7 +325,7 @@ void SPWFSA01::_packet_handler()
     uint32_t amount;
 
     // parse out the socket id
-    if (!_parser.recv("Pending Data:%d:%d", &id, &amount)) {
+    if (!_parser.recv("Pending Data:%d:%d\r", &id, &amount)) {
         if(data_pending) {  //not a callback but from socket_close
             id = socket_close_id;
             socket_close_id = 9;
@@ -337,8 +337,8 @@ void SPWFSA01::_packet_handler()
     /* cannot do read without query as in WIND:55 the length of data gets adding up and the actual data may be less at any given time */
     while(true) {
         if (!(_parser.send("AT+S.SOCKQ=%d", id)
-                && _parser.recv(" DATALEN: %u", &amount)
-                && _parser.recv("OK"))) {
+                && _parser.recv(" DATALEN: %u\r", &amount)
+                && _parser.recv("OK\r"))) {
             return;
         }
 
@@ -358,7 +358,7 @@ void SPWFSA01::_packet_handler()
 
         if (!(_parser.send("AT+S.SOCKR=%d,%d", id, amount)
                 && (_parser.read((char*)(packet + 1), amount) >0)
-                && _parser.recv("OK"))) {
+                && _parser.recv("OK\r"))) {
             free(packet);
             return;
         }
@@ -475,7 +475,7 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
         }
 
         // Wait for inbound packet
-        if (!_parser.recv("OK")) {
+        if (!_parser.recv("OK\r")) {
             //debug_if(dbg_on, "SPWF> recv :: ok\r\n");
             return -1;
             //debug_if(dbg_on, "SPWF> OK not recvd\r\n");
@@ -543,7 +543,7 @@ bool SPWFSA01::close(int id)
     //May take a second try if device is busy or error is returned
     for (unsigned i = 0; i < 2; i++) {
         if (_parser.send("AT+S.SOCKC=%d", id)
-                && _parser.recv("OK")) {
+                && _parser.recv("OK\r")) {
             uint8_t *packet = (uint8_t *)malloc(512);
             for(struct packet **p = &_packets; *p; p=&(*p)) {
                 debug_if(dbg_on,"\r\n Iterating over packets\r\n");
@@ -687,7 +687,7 @@ bool SPWFSA01::close(int id)
 void SPWFSA01::_error_handler()
 {
     debug_if(dbg_on,"\r\n SPWFSA01::_error_handle \r\n");
-    if(!(_parser.recv("data")))
+    if(!(_parser.recv("data\r")))
         return;
 
     data_pending = true;
@@ -701,7 +701,7 @@ void SPWFSA01::_error_handler()
 void SPWFSA01::sock_disconnected()
 {
     int id;
-    if(!(_parser.recv("Socket Closed:%d",&id)))
+    if(!(_parser.recv("Socket Closed:%d\r",&id)))
         return;
 
     // if we are closing socket by ourselves then the value of _cbs and _ids need to be changed..how ?
