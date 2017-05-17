@@ -15,6 +15,7 @@
  */
 
 #include "SPWFSA01.h"
+#include "SpwfInterface.h"
 #include "mbed_debug.h"
 
 #define SPWFSA01_CONNECT_TIMEOUT 15000
@@ -23,20 +24,20 @@
 //#define SPWFSA01_MISC_TIMEOUT    500
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
-    : _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
-      _wakeup(D14, PIN_INPUT, PullNone, 0), _reset(D15, PIN_INPUT, PullNone, 1),
-      _packets(0), _packets_end(&_packets),
-      //PC_12->D15, PC_8->D14 (re-wires needed in-case used, currently not used)
-      dbg_on(debug)
-      //Pin PC_8 is wakeup pin
-      //Pin PA_12 is reset pin
+: _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
+  _wakeup(D14, PIN_INPUT, PullNone, 0), _reset(D15, PIN_INPUT, PullNone, 1),
+  _packets(0), _packets_end(&_packets),
+  //PC_12->D15, PC_8->D14 (re-wires needed in-case used, currently not used)
+  dbg_on(debug)
+//Pin PC_8 is wakeup pin
+//Pin PA_12 is reset pin
 {
     _serial.baud(115200);
     _reset.output();
     _wakeup.output();
     _parser.debugOn(debug);
     data_pending = false;
-    socket_close_id = 9;
+    socket_close_id = SPWFSA_SERVER_SOCKET_NO;
 }
 
 bool SPWFSA01::startup(int mode)
@@ -299,23 +300,36 @@ bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
 
 }
 
+#define SPWFSA01_MAX_WRITE 4096U
 bool SPWFSA01::send(int id, const void *data, uint32_t amount)
 {
+    uint32_t sent = 0U, to_send;
+
     setTimeout(SPWFSA01_SEND_TIMEOUT);
 
-    MBED_ASSERT(amount <= 4096U); // betzw - TODO: not yet supported!
+    for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
+            sent < amount;
+            to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
+        unsigned int i;
 
-    // May take a second try if device is busy (betzw: TOINVESTIGATE - TODO)
-    for (unsigned i = 0; i < 2; i++) {
-        if (_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)amount)
-                && (_parser.write((char*)data, (int)amount) == (int)amount)
-                && _parser.recv("OK\r")) {
-            return true;
+        // May take a second try if device is busy (betzw: TOINVESTIGATE - TODO)
+        for (i = 0; i < 2; i++) {
+            if (_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)to_send)
+                    && (_parser.write((char*)data, (int)to_send) == (int)to_send)
+                    && _parser.recv("OK\r")) {
+                break;
+            }
         }
+
+        if(i >= 2) {
+            // betzw - TODO: handle different errors more accurately!
+            return false;
+        }
+
+        sent += to_send;
     }
 
-    // betzw - TODO: handle different errors more accurately!
-    return false;
+    return true;
 }
 
 #if 1
@@ -328,7 +342,7 @@ void SPWFSA01::_packet_handler()
     if (!_parser.recv("Pending Data:%d:%d\r", &id, &amount)) {
         if(data_pending) {  //not a callback but from socket_close
             id = socket_close_id;
-            socket_close_id = 9;
+            socket_close_id = SPWFSA_SERVER_SOCKET_NO;
             data_pending = false;
         }
         else return;
@@ -337,17 +351,21 @@ void SPWFSA01::_packet_handler()
     /* cannot do read without query as in WIND:55 the length of data gets adding up and the actual data may be less at any given time */
     while(true) {
         if (!(_parser.send("AT+S.SOCKQ=%d", id)
-                && _parser.recv(" DATALEN: %u\r", &amount)
-                && _parser.recv("OK\r"))) {
-            return;
+                && _parser.recv(" DATALEN: %u\r", &amount))) {
+            break;
         }
 
         if (amount==0) break; //no more data to be read
 
+        // Let it up to `SPWFSA01::recv()` to receive OK
+        if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
+            break;
+        }
+
         struct packet *packet = (struct packet*)malloc(
                 sizeof(struct packet) + amount);
         if (!packet) {
-            return;
+            break;
         }
 
         packet->id = id;
@@ -367,7 +385,6 @@ void SPWFSA01::_packet_handler()
         *_packets_end = packet;
         _packets_end = &packet->next;
     }
-    //debug_if(dbg_on, "SPWF> Exit packet Handler\r\n");
 }
 #endif
 
@@ -444,10 +461,6 @@ void SPWFSA01::_packet_handler()
  */
 int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
 {
-    Timer timer;
-    timer.start();
-    // bool _timeout = false;
-
     while (true) {
         // check if any packets are ready for us
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
@@ -476,16 +489,7 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
 
         // Wait for inbound packet
         if (!_parser.recv("OK\r")) {
-            //debug_if(dbg_on, "SPWF> recv :: ok\r\n");
             return -1;
-            //debug_if(dbg_on, "SPWF> OK not recvd\r\n");
-
-            /*
-		if (timer.read_ms() > 1500) {
-		debug_if(dbg_on, "SPWF> No Data, timeout\r\n");
-                return -1;
-		}
-             */
         }
     }
 
@@ -577,11 +581,11 @@ bool SPWFSA01::close(int id)
             //free (packet);
             data_pending = false;
             debug_if(dbg_on,"\r\nClose complete..returning\r\n");
-            socket_close_id = 9;
+            socket_close_id = SPWFSA_SERVER_SOCKET_NO;
             return true;
         }
     }
-    socket_close_id = 9;
+    socket_close_id = SPWFSA_SERVER_SOCKET_NO;
     return false;
 }
 #endif
@@ -669,13 +673,13 @@ bool SPWFSA01::close(int id)
     for (unsigned i = 0; i < 2; i++) {
         if (_parser.send("AT+S.SOCKC=%d", id)
                 && _parser.recv("OK")) {
-            socket_close_id = 9;
+            socket_close_id = SPWFSA_SERVER_SOCKET_NO;
             sock_close_ongoing = false;
             return true;
         }
     }
     sock_close_ongoing = false;
-    socket_close_id = 9;
+    socket_close_id = SPWFSA_SERVER_SOCKET_NO;
     return false;
 }
 #endif

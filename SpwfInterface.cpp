@@ -68,7 +68,6 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
 {
     memset(_ids, 0, sizeof(_ids));
     memset(_cbs, 0, sizeof(_cbs));
-    memset(_interim_cb , 0, sizeof(_interim_cb));
 
     _spwf.attach(this, &SpwfSAInterface::event);
 
@@ -295,31 +294,6 @@ int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
     addrs[sock_id] = addr;
 
     socket->connected = true;
-    //if we have above callback
-#if 0
-    if(socket->id != sock_id)
-    {
-        _cbs[sock_id].callback = _interim_cb[socket->id].callback;
-        _cbs[sock_id].data     = _interim_cb[socket->id].data;
-        _cbs[socket->id].callback		= 0;
-        _cbs[socket->id].data       = 0;
-        _ids[socket->id]			 = false;
-        _ids[sock_id]          = true;
-        socket->id						 = sock_id;
-    }
-#endif
-
-#if 1
-    // if we don't have above callback
-    _cbs[sock_id].callback = _interim_cb[socket->id].callback;
-    _cbs[sock_id].data     = _interim_cb[socket->id].data;
-    _ids[sock_id]    			 = true;
-    if(socket->id != sock_id)
-    {
-        _ids[socket->id] = false;
-        socket->id 			 = sock_id;
-    }
-#endif
 
     //TODO: Maintain a socket table to map socket ID to host & port
     //TODO: lookup on client table to see if already socket is allocated to same host/port
@@ -373,13 +347,13 @@ int SpwfSAInterface::socket_close(void *handle)
 {
     int err = 0;
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-    if(socket->id != SERVER_SOCKET_NO && _ids[socket->id]) {
+    if(socket->id != SPWFSA_SERVER_SOCKET_NO && _ids[socket->id]) {
         debug_if(dbg_on,"\r\n SpwfSAInterface::socket_close \r\n");
         _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
         if(socket->id != -1) {
             if (_spwf.close(socket->id)) {
-                if(socket->id==SERVER_SOCKET_NO)
+                if(socket->id==SPWFSA_SERVER_SOCKET_NO)
                     isListening = false;
                 else {
                     _ids[socket->id] = false;
@@ -407,7 +381,7 @@ int SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
     struct spwf_socket *socket = (struct spwf_socket *)handle;
     //int err;
 
-    /*if(socket->id==SERVER_SOCKET_NO)
+    /*if(socket->id==SPWFSA_SERVER_SOCKET_NO)
         {
             if(socket->server_port==-1 || !isListening) 
                 return NSAPI_ERROR_NO_SOCKET; //server socket not bound or not listening        
@@ -484,7 +458,7 @@ int SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *da
     struct spwf_socket *socket = (struct spwf_socket *)handle;
     struct SocketAddress *address = (struct SocketAddress *)addr;
     recv = socket_recv(socket, data, size);
-    if(recv > 0)
+    if((recv > 0) && (addr != NULL))
         *address = addrs[socket->id];
     return recv;
 }
@@ -509,13 +483,8 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-    if(!callback) {
-        set_cbs(socket->id,callback,data);
-    }
-    else {
-        _interim_cb[socket->id].callback = callback;
-        _interim_cb[socket->id].data = data;
-    }
+
+    set_cbs(socket->id,callback,data);
 }
 
 void SpwfSAInterface::event(void) {
@@ -529,7 +498,7 @@ void SpwfSAInterface::event(void) {
 void SpwfSAInterface::set_cbs(int id,void (*callback)(void *),void *data)
 {
     _cbs[id].callback = callback;
-    _cbs[id].data			= data;
+    _cbs[id].data = data;
 }
 
 /**

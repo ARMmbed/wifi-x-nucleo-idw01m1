@@ -39,8 +39,8 @@
 #include "mbed.h"
 #include "SPWFSA01.h"
 
-#define SPWFSA_SOCKET_COUNT 8
-#define SERVER_SOCKET_NO    9
+#define SPWFSA_SOCKET_COUNT         8
+#define SPWFSA_SERVER_SOCKET_NO     (SPWFSA_SOCKET_COUNT+1)
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
@@ -97,7 +97,7 @@ private:
     int         init(void);
 
     SPWFSA01 _spwf;
-    SocketAddress addrs[8];
+    SocketAddress addrs[SPWFSA_SOCKET_COUNT];
     bool _ids[SPWFSA_SOCKET_COUNT];
     bool isListening;
     bool isInitialized;
@@ -108,14 +108,7 @@ private:
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
-
-    //temporary callback data
-    struct {
-        void (*callback)(void *);
-        void *data;
-    } _interim_cb[SPWFSA_SOCKET_COUNT];
 };
 
 
 #endif
-
