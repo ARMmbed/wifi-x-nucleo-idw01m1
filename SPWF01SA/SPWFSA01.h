@@ -35,7 +35,6 @@ public:
      */
     bool startup(int mode);
 
-    void waitSPWFReady(void);
     /**
      * Reset SPWFSA01
      *
@@ -168,8 +167,8 @@ public:
 private:
     BufferedSerial _serial;
     ATParser _parser;
-    DigitalInOut _wakeup;
-    DigitalInOut _reset;
+    DigitalOut _wakeup;
+    DigitalOut _reset;
 
     struct packet {
         struct packet *next;
@@ -180,14 +179,12 @@ private:
 
     void _packet_handler();
     void _error_handler();
-    void sock_disconnected();
+    void _sock_disconnected();
+    void _wait_console_active();
 
     char _ip_buffer[16];
     char _mac_buffer[18];
     bool dbg_on;
-    bool data_pending;
-    bool sock_close_ongoing;
-    int socket_close_id;
 };
 
 #endif  //SPWFSA01_H

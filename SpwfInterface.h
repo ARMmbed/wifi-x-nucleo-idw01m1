@@ -40,10 +40,10 @@
 #include "SPWFSA01.h"
 
 #define SPWFSA_SOCKET_COUNT         8
-#define SPWFSA_SERVER_SOCKET_NO     (SPWFSA_SOCKET_COUNT+1)
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
+ *  NOTE - betzw - TODO: MUST become singleton!
  */
 class SpwfSAInterface : public NetworkStack, public WiFiInterface
 {
@@ -60,8 +60,6 @@ public:
 
     virtual     int disconnect();    
     virtual     const char *get_mac_address();
-    void        debug(const char * string);
-    void 				set_cbs(int id,void (*callback)(void *),void *data);
 
     //Implementation of NetworkStack
     virtual     const char *get_ip_address();
@@ -97,17 +95,17 @@ private:
     int         init(void);
 
     SPWFSA01 _spwf;
-    SocketAddress addrs[SPWFSA_SOCKET_COUNT];
-    bool _ids[SPWFSA_SOCKET_COUNT];
-    bool isListening;
+
     bool isInitialized;
     bool dbg_on;
 
-    void event(void);
     struct {
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
+    bool _ids[SPWFSA_SOCKET_COUNT];
+
+    void event(void);
 };
 
 
