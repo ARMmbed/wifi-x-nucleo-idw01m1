@@ -40,9 +40,8 @@ public:
      *
      * @return true only if SPWFSA01 resets successfully
      */
-    bool reset(void);
-
     bool hw_reset(void);
+    bool reset(void);
 
     /**
      * Enable/Disable DHCP
@@ -181,6 +180,9 @@ private:
     void _error_handler();
     void _sock_disconnected();
     void _wait_console_active();
+    int _read_in(char*, int, uint32_t);
+    int _read_len(int);
+    int _flush_in(char*, int);
 
     char _ip_buffer[16];
     char _mac_buffer[18];
@@ -188,4 +190,3 @@ private:
 };
 
 #endif  //SPWFSA01_H
-

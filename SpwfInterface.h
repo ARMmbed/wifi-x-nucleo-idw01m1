@@ -39,7 +39,7 @@
 #include "mbed.h"
 #include "SPWFSA01.h"
 
-#define SPWFSA_SOCKET_COUNT         8
+#define SPWFSA_SOCKET_COUNT 8
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device

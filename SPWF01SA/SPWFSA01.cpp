@@ -255,18 +255,9 @@ bool SPWFSA01::send(int id, const void *data, uint32_t amount)
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
-        unsigned int i;
-
-        // May take a second try if device is busy (betzw: TOINVESTIGATE - TODO)
-        for (i = 0; i < 2; i++) {
-            if (_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)to_send)
-                    && (_parser.write((char*)data, (int)to_send) == (int)to_send)
-                    && _parser.recv("OK\r")) {
-                break;
-            }
-        }
-
-        if(i >= 2) {
+        if (!(_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)to_send)
+                && (_parser.write((char*)data, (int)to_send) == (int)to_send)
+                && _parser.recv("OK\r"))) {
             // betzw - TODO: handle different errors more accurately!
             return false;
         }
@@ -277,10 +268,53 @@ bool SPWFSA01::send(int id, const void *data, uint32_t amount)
     return true;
 }
 
-void SPWFSA01::_packet_handler()
+int SPWFSA01::_read_len(int id) {
+    uint32_t amount;
+
+    if (!(_parser.send("AT+S.SOCKQ=%d", id)
+            && _parser.recv(" DATALEN: %u\r", &amount))) {
+        return -1;
+    }
+
+    return (int)amount;
+}
+
+int SPWFSA01::_flush_in(char* buffer, int size) {
+    int i = 0;
+
+    for ( ; i < size; i++) {
+        int c = _parser.getc();
+        if (c < 0) {
+            return -1;
+        }
+    }
+    return i;
+}
+
+int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
+    Callback<int(char*, int)> read_func;
+
+    if(buffer != NULL) {
+        Callback<int(char*, int)> parser_func(&_parser, &ATParser::read);
+        read_func = parser_func;
+    } else {
+        Callback<int(char*, int)> flush_func(this, &SPWFSA01::_flush_in);
+        read_func = flush_func;
+    }
+
+    if (!(_parser.send("AT+S.SOCKR=%d,%d", id, amount)
+            && (read_func(buffer, amount) > 0)
+            && _parser.recv("OK\r"))) {
+        return -1;
+    }
+
+    return amount;
+}
+
+void SPWFSA01::_packet_handler(void)
 {
     int id;
-    uint32_t amount;
+    int amount;
 
     // parse out the socket id
     if (!_parser.recv("Pending Data:%d:%d\r", &id, &amount)) {
@@ -289,31 +323,24 @@ void SPWFSA01::_packet_handler()
 
     /* cannot do read without query as in WIND:55 the length of data gets adding up and the actual data may be less at any given time */
     while(true) {
-        if (!(_parser.send("AT+S.SOCKQ=%d", id)
-                && _parser.recv(" DATALEN: %u\r", &amount))) {
-            break;
-        }
-
-        if (amount==0) break; //no more data to be read
+        if ((amount = _read_len(id)) <= 0) return; //no more data to be read
 
         // Let it up to `SPWFSA01::recv()` to receive OK
         if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
-            break;
+            return;
         }
 
         struct packet *packet = (struct packet*)malloc(
                 sizeof(struct packet) + amount);
         if (!packet) {
-            break;
+            return;
         }
 
         packet->id = id;
-        packet->len = amount;
+        packet->len = (uint32_t)amount;
         packet->next = 0;
 
-        if (!(_parser.send("AT+S.SOCKR=%d,%d", id, amount)
-                && (_parser.read((char*)(packet + 1), amount) >0)
-                && _parser.recv("OK\r"))) {
+        if(!(_read_in((char*)(packet + 1), id, (uint32_t)amount) > 0)) {
             free(packet);
             return;
         }
@@ -366,49 +393,31 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
 
 bool SPWFSA01::close(int id)
 {
-    debug_if(dbg_on,"\r\n SPWFSA01::close\r\n");
-    int length=0;
+    int amount;
 
-    //May take a second try if device is busy or error is returned
-    // betzw - TODO: to be reviewed!
-    for (unsigned i = 0; i < 2; i++) {
-        if (_parser.send("AT+S.SOCKC=%d", id)
-                && _parser.recv("OK\r")) {
-            uint8_t *packet = (uint8_t *)malloc(512);
-            for(struct packet **p = &_packets; *p; p=&(*p)) {
-                debug_if(dbg_on,"\r\n Iterating over packets\r\n");
-                if((*p)->id == id) {
-                    length = (*p)->len;
-                    while(length > 0) {
-                        debug_if(dbg_on,"\r\n Data of one packet %d \r\n",(*p)->len);
-                        struct packet *q = *p;
-                        if (q->len <= 512) { // Return and remove full packet
-                            memcpy(packet, q+1, q->len);
+    MBED_ASSERT(id != SPWFSA_SOCKET_COUNT);
 
-                            if (_packets_end == &(*p)->next) {
-                                _packets_end = p;
-                            }
-                            *p = (*p)->next;
-                            q->len = 0;
-                            length = 0;
-                            free(q);
-                            debug_if(dbg_on,"\r\n packet free!\r\n");
-                            break;
-                        }
-                        else { // return only partial packet
-                            memcpy(packet, q+1, 512);
-                            q->len -= 512;
-                            length = q->len;
-                            memmove(q+1, (uint8_t*)(q+1) + 512, q->len);
-                        }
-                    }
-                }
-            }
-            //free (packet);
-            debug_if(dbg_on,"\r\nClose complete..returning\r\n");
-            return true;
+    // Flush out pending data
+    while(true) {
+        if((amount = _read_len(id)) < 0) return false;
+
+        if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
+            return false;
+        }
+
+        if(amount == 0) break; // no more data to be read
+
+        if(!(_read_in((char*)NULL, id, (uint32_t)amount) > 0)) {
+            return false;
         }
     }
+
+    // Close socket
+    if (_parser.send("AT+S.SOCKC=%d", id)
+            && _parser.recv("OK\r")) {
+        return true;
+    }
+
     return false;
 }
 
