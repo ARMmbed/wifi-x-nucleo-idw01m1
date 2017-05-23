@@ -39,7 +39,14 @@
 #include "mbed.h"
 #include "SPWFSA01.h"
 
+/* Max number of sockets */
 #define SPWFSA_SOCKET_COUNT 8
+
+// Various timeouts for different SPWF operations
+#define SPWF_CONNECT_TIMEOUT 15000
+#define SPWF_SEND_TIMEOUT    500
+#define SPWF_RECV_TIMEOUT    10
+#define SPWF_MISC_TIMEOUT    500
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device

@@ -36,12 +36,6 @@
 #include "SpwfInterface.h"
 #include "mbed_debug.h"
 
-// Various timeouts for different SPWF operations
-#define SPWF_CONNECT_TIMEOUT 15000
-#define SPWF_SEND_TIMEOUT    500
-#define SPWF_RECV_TIMEOUT    10
-#define SPWF_MISC_TIMEOUT    500
-
 /** spwf_socket class
  *  Implementation of SPWF socket structure
  */
@@ -92,7 +86,7 @@ SpwfSAInterface::~SpwfSAInterface()
  */
 int SpwfSAInterface::init(void) 
 {
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
     if(_spwf.startup(0)) {
         return true;

@@ -20,11 +20,13 @@
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
 : _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
-  _wakeup(PC_8), _reset(PC_12, 1),
-  _packets(0), _packets_end(&_packets),
-  dbg_on(debug)
+  _wakeup(PC_8, 1), _reset(PC_12, 1),
+  _rx_sem(0), _release_sem(false), _callback_func(),
+  _timeout(0), _dbg_on(debug),
+  _packets(0), _packets_end(&_packets)
 {
     _serial.baud(115200);
+    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
     _parser.debugOn(debug);
 }
 
@@ -32,50 +34,55 @@ bool SPWFSA01::startup(int mode)
 {
     /*Reset module*/
     hw_reset();
+    reset();
 
     /*set local echo to 0*/
-    if(!(_parser.send("AT+S.SCFG=localecho1,%d", 0) && _parser.recv("OK\r")))
+    if(!(_parser.send("AT+S.SCFG=localecho1,0") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error local echo set\r\n");
-        return false;
-    }
-    /*reset factory settings*/
-    if(!(_parser.send("AT&F") && _parser.recv("OK\r")))
-    {
-        debug_if(dbg_on, "SPWF> error AT&F\r\n");
+        debug_if(_dbg_on, "SPWF> error local echo set\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,%d",1) && _parser.recv("OK\r")))
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error setting ht_mode\r\n");
+        debug_if(_dbg_on, "SPWF> error setting ht_mode\r\n");
         return false;
     }
 
     /*set the operational rate*/
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error setting operational rates\r\n");
+        debug_if(_dbg_on, "SPWF> error setting operational rates\r\n");
         return false;
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
+        debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
 
-    /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
+    /* set number of consecutive loss beacon to detect the AP disassociation */
+    if(!(_parser.send("AT+S.SCFG=wifi_beacon_loss_thresh,10") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error AT&W\r\n");
+        debug_if(_dbg_on, "SPWF> error wifi beacon loss thresh set\r\n");
         return false;
     }
+
+#ifndef NDEBUG
+    /* display all configuration values (only for debug) */
+    if(!(_parser.send("AT&V") && _parser.recv("OK\r")))
+    {
+        debug_if(_dbg_on, "SPWF> error AT&V\r\n");
+        return false;
+    }
+#endif
 
     _parser.oob("+WIND:55:", this, &SPWFSA01::_packet_handler);
     _parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
+    _parser.oob("+WIND:41:", this, &SPWFSA01::_disassociation_handler);
     // betzw - TODO: _parser.oob("+WIND:58:", this, &SPWFSA01::_sock_disconnected);
 
     return true;
@@ -119,33 +126,26 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error pass set\r\n");
+        debug_if(_dbg_on, "SPWF> error pass set\r\n");
         return false;
     } 
     //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error ssid set\r\n");
+        debug_if(_dbg_on, "SPWF> error ssid set\r\n");
         return false;
     }
     //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error security mode set\r\n");
+        debug_if(_dbg_on, "SPWF> error security mode set\r\n");
         return false;
     } 
     //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1) && _parser.recv("OK\r")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
-        return false;
-    }
-    //AT&W
-    /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
-    {
-        debug_if(dbg_on, "SPWF> error AT&W\r\n");
+        debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -162,16 +162,9 @@ bool SPWFSA01::disconnect(void)
 {
     //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 0) && _parser.recv("OK\r")))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _parser.recv("OK\r")))
     {
-        debug_if(dbg_on, "SPWF> error wifi mode set\r\n");
-        return false;
-    }
-    //AT&W
-    /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _parser.recv("OK\r")))
-    {
-        debug_if(dbg_on, "SPWF> error AT&W\r\n");
+        debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -198,7 +191,7 @@ const char *SPWFSA01::getIPAddress(void)
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\r", &n1, &n2, &n3, &n4)
             && _parser.recv("OK\r"))) {
-        debug_if(dbg_on, "SPWF> getIPAddress error\r\n");
+        debug_if(_dbg_on, "SPWF> getIPAddress error\r\n");
         return 0;
     }
 
@@ -214,7 +207,7 @@ const char *SPWFSA01::getMACAddress(void)
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
             && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r", &n1, &n2, &n3, &n4, &n5, &n6)
             && _parser.recv("OK\r"))) {
-        debug_if(dbg_on, "SPWF> getMACAddress error\r\n");
+        debug_if(_dbg_on, "SPWF> getMACAddress error\r\n");
         return 0;
     }
 
@@ -234,7 +227,7 @@ bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
-        debug_if(dbg_on, "SPWF> error opening socket\r\n");
+        debug_if(_dbg_on, "SPWF> error opening socket\r\n");
         return false;
     }
 
@@ -362,7 +355,7 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
         // check if any packets are ready for us
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == id) {
-                debug_if(dbg_on,"\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
+                debug_if(_dbg_on,"\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -431,6 +424,68 @@ void SPWFSA01::_error_handler()
 }
 
 /*
+ * Buffered serial event handler
+ *
+ * Note: executed in IRQ context!
+ *
+ */
+void SPWFSA01::_event_handler()
+{
+    if(_release_sem) _rx_sem.release();
+    if((bool)_callback_func) _callback_func();
+}
+
+/*
+ * Handling OOb (+WIND:33:WiFi Network Lost)
+ *
+ * betzw - TODO: error handling still to be implemented!
+ *
+ */
+void SPWFSA01::_disassociation_handler()
+{
+    int reason;
+    uint32_t n1, n2, n3, n4;
+    int saved_timeout = _timeout;
+
+    setTimeout(SPWF_CONNECT_TIMEOUT);
+
+    // parse out reason
+    if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
+        error("\r\n SPWFSA01::_disassociation_handler() #1\r\n");
+    }
+    debug_if(_dbg_on, "Disassociation: %d\r\n", reason);
+
+    /* trigger scan */
+    if(!(_parser.send("AT+S.SCAN") && _parser.recv("OK\r")))
+    {
+        error("\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+    }
+
+    if(!(_parser.send("AT+S.ROAM") && _parser.recv("OK\r")))
+    {
+        error("\r\n SPWFSA01::_disassociation_handler() #2\r\n");
+    }
+
+    _release_sem = true;
+    while(true) {
+        if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)))
+        {
+            _release_sem = false;
+            setTimeout(saved_timeout);
+
+            debug_if(_dbg_on, "Re-connected!\r\n");
+            return;
+        } else {
+            if(_rx_sem.wait(SPWF_CONNECT_TIMEOUT) <= 0) { // wait for IRQ
+                error("\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+            }
+        }
+    }
+
+    error("\r\n SPWFSA01::_disassociation_handler() #0\r\n");
+}
+
+/*
  * Handling OOB (+WIND:58)
  * when server closes a client connection
  */
@@ -451,6 +506,7 @@ void SPWFSA01::_sock_disconnected()
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)
 {
+    _timeout = timeout_ms;
     _parser.setTimeout(timeout_ms);
 }
 
@@ -466,5 +522,5 @@ bool SPWFSA01::writeable()
 
 void SPWFSA01::attach(Callback<void()> func)
 {
-    _serial.attach(func);
+    _callback_func = func;
 }

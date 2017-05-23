@@ -168,6 +168,11 @@ private:
     ATParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
+    rtos::Semaphore _rx_sem;
+    bool _release_sem;
+    Callback<void()> _callback_func;
+    int _timeout;
+    bool _dbg_on;
 
     struct packet {
         struct packet *next;
@@ -178,6 +183,8 @@ private:
 
     void _packet_handler();
     void _error_handler();
+    void _disassociation_handler();
+    void _event_handler();
     void _sock_disconnected();
     void _wait_console_active();
     int _read_in(char*, int, uint32_t);
@@ -186,7 +193,6 @@ private:
 
     char _ip_buffer[16];
     char _mac_buffer[18];
-    bool dbg_on;
 };
 
 #endif  //SPWFSA01_H
