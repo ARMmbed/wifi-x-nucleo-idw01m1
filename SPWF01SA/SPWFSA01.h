@@ -169,7 +169,7 @@ private:
     DigitalOut _wakeup;
     DigitalOut _reset;
     rtos::Semaphore _rx_sem;
-    bool _release_sem;
+    volatile bool _release_sem;
     Callback<void()> _callback_func;
     int _timeout;
     bool _dbg_on;

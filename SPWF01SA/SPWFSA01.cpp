@@ -149,7 +149,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
         return false;
     }
 
-    while(1)
+    while(true)
         if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)))
         {
             break;
@@ -307,41 +307,50 @@ int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
 void SPWFSA01::_packet_handler(void)
 {
     int id;
-    int amount;
+    int total_amount;
+    int current_amount;
+    struct packet *packet = NULL;
 
     // parse out the socket id
-    if (!_parser.recv("Pending Data:%d:%d\r", &id, &amount)) {
+    if (!_parser.recv("Pending Data:%d:%d\r", &id, &total_amount)) {
         return;
     }
 
     /* cannot do read without query as in WIND:55 the length of data gets adding up and the actual data may be less at any given time */
-    while(true) {
-        if ((amount = _read_len(id)) <= 0) return; //no more data to be read
+    while(total_amount > 0) {
+        if ((current_amount = _read_len(id)) <= 0) {
+            if(packet != NULL) free(packet);
+            return; //no more data to be read
+        }
 
-        // Let it up to `SPWFSA01::recv()` to receive OK
         if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
+            if(packet != NULL) free(packet);
             return;
         }
 
-        struct packet *packet = (struct packet*)malloc(
-                sizeof(struct packet) + amount);
-        if (!packet) {
-            return;
+        if(packet == NULL) {
+            packet = (struct packet*)malloc(
+                    sizeof(struct packet) + total_amount);
+            if (!packet) {
+                return;
+            }
+
+            packet->id = id;
+            packet->len = (uint32_t)total_amount;
+            packet->next = 0;
         }
 
-        packet->id = id;
-        packet->len = (uint32_t)amount;
-        packet->next = 0;
-
-        if(!(_read_in((char*)(packet + 1), id, (uint32_t)amount) > 0)) {
+        if(!(_read_in((char*)(packet + 1), id, (uint32_t)current_amount) > 0)) {
             free(packet);
             return;
         }
 
-        // append to packet list
-        *_packets_end = packet;
-        _packets_end = &packet->next;
+        total_amount -= current_amount;
     }
+
+    // append to packet list
+    *_packets_end = packet;
+    _packets_end = &packet->next;
 }
 
 /**
@@ -431,8 +440,10 @@ void SPWFSA01::_error_handler()
  */
 void SPWFSA01::_event_handler()
 {
-    if(_release_sem) _rx_sem.release();
-    if((bool)_callback_func) _callback_func();
+    if(_release_sem)
+        _rx_sem.release();
+    if((bool)_callback_func)
+        _callback_func();
 }
 
 /*
@@ -445,6 +456,7 @@ void SPWFSA01::_disassociation_handler()
 {
     int reason;
     uint32_t n1, n2, n3, n4;
+    int err;
     int saved_timeout = _timeout;
 
     setTimeout(SPWF_CONNECT_TIMEOUT);
@@ -467,6 +479,7 @@ void SPWFSA01::_disassociation_handler()
     }
 
     _release_sem = true;
+    setTimeout(SPWF_RECV_TIMEOUT);
     while(true) {
         if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)))
         {
@@ -476,8 +489,8 @@ void SPWFSA01::_disassociation_handler()
             debug_if(_dbg_on, "Re-connected!\r\n");
             return;
         } else {
-            if(_rx_sem.wait(SPWF_CONNECT_TIMEOUT) <= 0) { // wait for IRQ
-                error("\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+            if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
+                error("\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
             }
         }
     }
