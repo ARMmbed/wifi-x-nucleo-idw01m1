@@ -18,11 +18,12 @@
 #include "SpwfInterface.h"
 #include "mbed_debug.h"
 
-SPWFSA01::SPWFSA01(PinName tx, PinName rx, bool debug)
+SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rx_sem(0), _release_sem(false), _callback_func(),
   _timeout(0), _dbg_on(debug),
+  _associated_interface(ifce),
   _packets(0), _packets_end(&_packets)
 {
     _serial.baud(115200);
@@ -57,17 +58,17 @@ bool SPWFSA01::startup(int mode)
         return false;
     }
 
-    /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK\r")))
-    {
-        debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
-        return false;
-    }
-
     /* set number of consecutive loss beacon to detect the AP disassociation */
     if(!(_parser.send("AT+S.SCFG=wifi_beacon_loss_thresh,10") && _parser.recv("OK\r")))
     {
         debug_if(_dbg_on, "SPWF> error wifi beacon loss thresh set\r\n");
+        return false;
+    }
+
+    /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _parser.recv("OK\r")))
+    {
+        debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -192,7 +193,7 @@ const char *SPWFSA01::getIPAddress(void)
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\r", &n1, &n2, &n3, &n4)
             && _parser.recv("OK\r"))) {
         debug_if(_dbg_on, "SPWF> getIPAddress error\r\n");
-        return 0;
+        return NULL;
     }
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
@@ -364,7 +365,7 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
         // check if any packets are ready for us
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == id) {
-                debug_if(_dbg_on,"\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
+                debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -459,23 +460,28 @@ void SPWFSA01::_disassociation_handler()
     int err;
     int saved_timeout = _timeout;
 
+    _associated_interface._connected_to_network = false;
+
     setTimeout(SPWF_CONNECT_TIMEOUT);
 
     // parse out reason
     if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
-        error("\r\n SPWFSA01::_disassociation_handler() #1\r\n");
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #1\r\n");
+        return;
     }
     debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
 
     /* trigger scan */
     if(!(_parser.send("AT+S.SCAN") && _parser.recv("OK\r")))
     {
-        error("\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+        return;
     }
 
     if(!(_parser.send("AT+S.ROAM") && _parser.recv("OK\r")))
     {
-        error("\r\n SPWFSA01::_disassociation_handler() #2\r\n");
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #2\r\n");
+        return;
     }
 
     _release_sem = true;
@@ -487,15 +493,15 @@ void SPWFSA01::_disassociation_handler()
             setTimeout(saved_timeout);
 
             debug_if(true, "Re-connected!\r\n"); // betzw - TODO: `true` only for debug!
+            _associated_interface._connected_to_network = true;
             return;
         } else {
             if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                error("\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
+                debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
+                return;
             }
         }
     }
-
-    error("\r\n SPWFSA01::_disassociation_handler() #0\r\n");
 }
 
 /*

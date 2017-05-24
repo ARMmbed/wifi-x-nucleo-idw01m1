@@ -18,14 +18,16 @@
 #define SPWFSA01_H
  
 #include "ATParser.h"
- 
+
+class SpwfSAInterface;
+
 /** SPWFSA01Interface class.
     This is an interface to a SPWFSA01 module.
  */
 class SPWFSA01
 {
 public:
-    SPWFSA01(PinName tx, PinName rx, bool debug=false);
+    SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug=false);
 
     /**
      * Init the SPWFSA01
@@ -169,10 +171,11 @@ private:
     DigitalOut _wakeup;
     DigitalOut _reset;
     rtos::Semaphore _rx_sem;
-    volatile bool _release_sem;
+    bool _release_sem;
     Callback<void()> _callback_func;
     int _timeout;
     bool _dbg_on;
+    SpwfSAInterface &_associated_interface;
 
     struct packet {
         struct packet *next;

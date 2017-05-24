@@ -43,7 +43,6 @@ struct spwf_socket {
     int internal_id;
     int spwf_id;
     nsapi_protocol_t proto;
-    bool connected;
     SocketAddress addr;
 };
 
@@ -58,8 +57,9 @@ struct spwf_socket {
  * @retval none
  */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-: _spwf(tx, rx, debug),
-  dbg_on(debug)
+: _spwf(tx, rx, *this, debug),
+  dbg_on(debug),
+  _connected_to_network(false)
 {
     memset(_ids, 0, sizeof(_ids));
     memset(_cbs, 0, sizeof(_cbs));
@@ -84,7 +84,7 @@ SpwfSAInterface::~SpwfSAInterface()
  * @param  none
  * @retval error value
  */
-int SpwfSAInterface::init(void) 
+nsapi_error_t SpwfSAInterface::init(void)
 {
     _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
@@ -102,10 +102,10 @@ int SpwfSAInterface::init(void)
  *         security: type of NSAPI security supported
  * @retval NSAPI Error Type
  */
-int SpwfSAInterface::connect(const char *ap, 
-                             const char *pass_phrase, 
-                             nsapi_security_t security,
-                             uint8_t channel)
+nsapi_error_t SpwfSAInterface::connect(const char *ap,
+                                       const char *pass_phrase,
+                                       nsapi_security_t security,
+                                       uint8_t channel)
 {
     int mode;
 
@@ -140,6 +140,7 @@ int SpwfSAInterface::connect(const char *ap,
         return NSAPI_ERROR_NO_CONNECTION;
     }
 
+    _connected_to_network = true;
     return NSAPI_ERROR_OK;
 }
 
@@ -149,14 +150,17 @@ int SpwfSAInterface::connect(const char *ap,
  * @param  none
  * @retval NSAPI Error Type
  */
-int SpwfSAInterface::disconnect()
+nsapi_error_t SpwfSAInterface::disconnect()
 {
+    CHECK_NOT_CONNECTED_ERR();
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
     if (!_spwf.disconnect()) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
+    _connected_to_network = false;
     return NSAPI_ERROR_OK;
 }
 
@@ -188,7 +192,7 @@ const char *SpwfSAInterface::get_mac_address()
  *         proto: TCP/UDP protocol
  * @retval NSAPI Error Type
  */
-int SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
+nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
     int id = SPWFSA_SOCKET_COUNT;
 
@@ -215,7 +219,6 @@ int SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
     socket->internal_id = id;
     socket->spwf_id = SPWFSA_SOCKET_COUNT;
     socket->proto = proto;
-    socket->connected = false;
 
     *handle = socket;
     return NSAPI_ERROR_OK;
@@ -227,9 +230,12 @@ int SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
  *         addr: Address to connect to
  * @retval NSAPI Error Type
  */
-int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
+nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
+
+    if(socket->spwf_id != SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_IS_CONNECTED;
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
     const char *proto = (socket->proto == NSAPI_UDP) ? "u" : "t"; //"s" for secure socket?
@@ -238,29 +244,28 @@ int SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    socket->connected = true;
     return NSAPI_ERROR_OK;
 }
 
-int SpwfSAInterface::socket_bind(void *handle, const SocketAddress &address)
+nsapi_error_t SpwfSAInterface::socket_bind(void *handle, const SocketAddress &address)
 {
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
-int SpwfSAInterface::socket_listen(void *handle, int backlog)
+nsapi_error_t SpwfSAInterface::socket_listen(void *handle, int backlog)
 {      
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
-int SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address)
+nsapi_error_t SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address)
 {    
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
-int SpwfSAInterface::socket_close(void *handle)
+nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-    int err = NSAPI_ERROR_OK;
+    nsapi_error_t err = NSAPI_ERROR_OK;
 
     MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
 
@@ -285,9 +290,12 @@ int SpwfSAInterface::socket_close(void *handle)
  *         size: size of data
  * @retval no of bytes sent
  */
-int SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
+nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
+
+    CHECK_NOT_CONNECTED_ERR();
+
     _spwf.setTimeout(SPWF_SEND_TIMEOUT);
 
     if (!_spwf.send(socket->spwf_id, data, size)) {
@@ -304,9 +312,11 @@ int SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
  *         size: size of data
  * @retval no of bytes read
  */
-int SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
+nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
+
+    CHECK_NOT_CONNECTED_ERR();
 
     _spwf.setTimeout(SPWF_RECV_TIMEOUT);
 
@@ -326,20 +336,22 @@ int SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
  *         size: size of data
  * @retval no of bytes sent
  */
-int SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
+nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
 
-    if (socket->connected && socket->addr != addr) {
+    CHECK_NOT_CONNECTED_ERR();
+
+    if ((socket->spwf_id != SPWFSA_SOCKET_COUNT) && (socket->addr != addr)) {
         _spwf.setTimeout(SPWF_MISC_TIMEOUT);
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
-        socket->connected = false;
+        socket->spwf_id = SPWFSA_SOCKET_COUNT;
     }
 
-    if (!socket->connected) {
-        int err = socket_connect(socket, addr);
+    if (socket->spwf_id == SPWFSA_SOCKET_COUNT) {
+        nsapi_error_t err = socket_connect(socket, addr);
         if (err < 0) {
             return err;
         }
@@ -357,10 +369,14 @@ int SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, cons
  *         size: size of data
  * @retval no of bytes read
  */
-int SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
+nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
     struct spwf_socket *socket = (struct spwf_socket *)handle;
-    int ret = socket_recv(socket, data, size);
+    nsapi_error_t ret;
+
+    CHECK_NOT_CONNECTED_ERR();
+
+    ret = socket_recv(socket, data, size);
     if (ret >= 0 && addr) {
         *addr = socket->addr;
     }
@@ -393,28 +409,28 @@ void SpwfSAInterface::event(void) {
     }
 }
 
-int SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security) //not supported
+nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security) //not supported
 {
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
 
-int SpwfSAInterface::set_channel(uint8_t channel)
+nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 {
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
 int8_t SpwfSAInterface::get_rssi()
 {
-    return (int8_t)NSAPI_ERROR_UNSUPPORTED;
+    return 0;  // betzw - TODO: not yet supported!
 }
 
-int SpwfSAInterface::connect()
+nsapi_error_t SpwfSAInterface::connect()
 {
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
-int SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
+nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
     return NSAPI_ERROR_UNSUPPORTED;
 }

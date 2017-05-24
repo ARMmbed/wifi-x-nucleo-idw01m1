@@ -60,12 +60,12 @@ public:
     virtual     ~SpwfSAInterface();
 
     // Implementation of WiFiInterface
-    virtual     int connect(const char *ssid,
-                            const char *pass,
-                            nsapi_security_t security = NSAPI_SECURITY_NONE,
-                            uint8_t channel = 0);
+    virtual     nsapi_error_t connect(const char *ssid,
+                                      const char *pass,
+                                      nsapi_security_t security = NSAPI_SECURITY_NONE,
+                                      uint8_t channel = 0);
 
-    virtual     int disconnect();    
+    virtual     nsapi_error_t disconnect();
     virtual     const char *get_mac_address();
 
     //Implementation of NetworkStack
@@ -73,24 +73,24 @@ public:
 
 protected:
     //Implementation of NetworkStack
-    virtual     int socket_open(void **handle, nsapi_protocol_t proto);
-    virtual     int socket_close(void *handle);
-    virtual     int socket_bind(void *handle, const SocketAddress &address);  //not supported
-    virtual     int socket_listen(void *handle, int backlog);
-    virtual     int socket_connect(void *handle, const SocketAddress &address);
-    //virtual     int socket_accept(nsapi_socket_t server, void **handle);
-    virtual			int socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address=0);  // not supported
-    virtual     int socket_send(void *handle, const void *data, unsigned size);
-    virtual     int socket_recv(void *handle, void *data, unsigned size);
-    virtual     int socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size);
-    virtual     int socket_recvfrom(void *handle, SocketAddress *address, void *buffer, unsigned size);
+    virtual     nsapi_error_t socket_open(void **handle, nsapi_protocol_t proto);
+    virtual     nsapi_error_t socket_close(void *handle);
+    virtual     nsapi_error_t socket_bind(void *handle, const SocketAddress &address);  //not supported
+    virtual     nsapi_error_t socket_listen(void *handle, int backlog);
+    virtual     nsapi_error_t socket_connect(void *handle, const SocketAddress &address);
+    //virtual     nsapi_error_t socket_accept(nsapi_socket_t server, void **handle);
+    virtual	    nsapi_error_t socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address=0);  // not supported
+    virtual     nsapi_error_t socket_send(void *handle, const void *data, unsigned size);
+    virtual     nsapi_error_t socket_recv(void *handle, void *data, unsigned size);
+    virtual     nsapi_error_t socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size);
+    virtual     nsapi_error_t socket_recvfrom(void *handle, SocketAddress *address, void *buffer, unsigned size);
     virtual     void socket_attach(void *handle, void (*callback)(void *), void *data);
     /* WiFiInterface */
-    virtual 		int set_credentials(const char *ssid, const char *pass, nsapi_security_t security = NSAPI_SECURITY_NONE); //not supported
-    virtual 		int set_channel(uint8_t channel);
+    virtual 		nsapi_error_t set_credentials(const char *ssid, const char *pass, nsapi_security_t security = NSAPI_SECURITY_NONE); //not supported
+    virtual 		nsapi_error_t set_channel(uint8_t channel);
     virtual 		int8_t get_rssi();
-    virtual 		int connect();
-    virtual 		int scan(WiFiAccessPoint *res, unsigned count);
+    virtual 		nsapi_error_t connect();
+    virtual 		nsapi_error_t scan(WiFiAccessPoint *res, unsigned count);
 
 
     virtual NetworkStack *get_stack()
@@ -99,12 +99,13 @@ protected:
     }
 
 private:
-    int         init(void);
+    nsapi_error_t         init(void);
 
     SPWFSA01 _spwf;
 
     bool isInitialized;
     bool dbg_on;
+    bool _connected_to_network;
 
     struct {
         void (*callback)(void *);
@@ -113,7 +114,14 @@ private:
     bool _ids[SPWFSA_SOCKET_COUNT];
 
     void event(void);
+
+private:
+    friend class SPWFSA01;
 };
+
+#define CHECK_NOT_CONNECTED_ERR() { \
+        if(!_connected_to_network) return NSAPI_ERROR_NO_CONNECTION; \
+} \
 
 
 #endif
