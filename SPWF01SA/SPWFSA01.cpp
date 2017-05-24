@@ -465,7 +465,7 @@ void SPWFSA01::_disassociation_handler()
     if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
         error("\r\n SPWFSA01::_disassociation_handler() #1\r\n");
     }
-    debug_if(_dbg_on, "Disassociation: %d\r\n", reason);
+    debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
 
     /* trigger scan */
     if(!(_parser.send("AT+S.SCAN") && _parser.recv("OK\r")))
@@ -486,7 +486,7 @@ void SPWFSA01::_disassociation_handler()
             _release_sem = false;
             setTimeout(saved_timeout);
 
-            debug_if(_dbg_on, "Re-connected!\r\n");
+            debug_if(true, "Re-connected!\r\n"); // betzw - TODO: `true` only for debug!
             return;
         } else {
             if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
