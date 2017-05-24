@@ -466,7 +466,7 @@ void SPWFSA01::_disassociation_handler()
 
     // parse out reason
     if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #1\r\n");
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #1\r\n"); // betzw - TODO: `true` only for debug!
         return;
     }
     debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
@@ -474,13 +474,13 @@ void SPWFSA01::_disassociation_handler()
     /* trigger scan */
     if(!(_parser.send("AT+S.SCAN") && _parser.recv("OK\r")))
     {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #3\r\n");
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #3\r\n"); // betzw - TODO: `true` only for debug!
         return;
     }
 
     if(!(_parser.send("AT+S.ROAM") && _parser.recv("OK\r")))
     {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #2\r\n");
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #2\r\n"); // betzw - TODO: `true` only for debug!
         return;
     }
 
@@ -497,7 +497,7 @@ void SPWFSA01::_disassociation_handler()
             return;
         } else {
             if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
+                debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err); // betzw - TODO: `true` only for debug!
                 return;
             }
         }
