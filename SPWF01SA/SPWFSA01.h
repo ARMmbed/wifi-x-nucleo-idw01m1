@@ -171,7 +171,8 @@ private:
     DigitalOut _wakeup;
     DigitalOut _reset;
     rtos::Semaphore _rx_sem;
-    bool _release_sem;
+    bool _release_rx_sem;
+    int _disassoc_handler_recursive_cnt;
     Callback<void()> _callback_func;
     int _timeout;
     bool _dbg_on;

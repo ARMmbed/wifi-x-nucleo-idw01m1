@@ -110,8 +110,6 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
         isInitialized=true;
     }
 
-    _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
-
     switch(security)
     {
         case NSAPI_SECURITY_NONE:
@@ -129,6 +127,16 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
             mode = 2;
             break;
     }
+
+    // First: disconnect
+    if(_connected_to_network) {
+        if(!disconnect()) {
+            return NSAPI_ERROR_DEVICE_ERROR;
+        }
+    }
+
+    // Then: (re-)connect
+    _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
     if (!_spwf.connect(ap, pass_phrase, mode)) {
         return NSAPI_ERROR_NO_CONNECTION;
