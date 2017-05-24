@@ -99,6 +99,16 @@ protected:
     }
 
 private:
+    /** spwf_socket class
+     *  Implementation of SPWF socket structure
+     */
+    typedef struct spwf_socket {
+        int8_t internal_id;
+        int spwf_id;
+        nsapi_protocol_t proto;
+        SocketAddress addr;
+    } spwf_socket_t;
+
     nsapi_error_t         init(void);
 
     SPWFSA01 _spwf;
@@ -111,7 +121,7 @@ private:
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
-    bool _ids[SPWFSA_SOCKET_COUNT];
+    spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
 
     void event(void);
 

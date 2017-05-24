@@ -36,16 +36,6 @@
 #include "SpwfInterface.h"
 #include "mbed_debug.h"
 
-/** spwf_socket class
- *  Implementation of SPWF socket structure
- */
-struct spwf_socket {
-    int internal_id;
-    int spwf_id;
-    nsapi_protocol_t proto;
-    SocketAddress addr;
-};
-
 /**
  * @brief  SpwfSAInterface constructor
  * @param  tx: Pin USART TX
@@ -63,6 +53,10 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
 {
     memset(_ids, 0, sizeof(_ids));
     memset(_cbs, 0, sizeof(_cbs));
+
+    for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
+        _ids[i].internal_id = SPWFSA_SOCKET_COUNT;
+    }
 
     _spwf.attach(this, &SpwfSAInterface::event);
 
@@ -194,14 +188,10 @@ const char *SpwfSAInterface::get_mac_address()
  */
 nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
-    int id = SPWFSA_SOCKET_COUNT;
+    int id;
 
-    for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-        if (!_ids[i]) {
-            id = i;
-            _ids[i] = true;
-            break;
-        }
+    for (id = 0; id < SPWFSA_SOCKET_COUNT; id++) {
+        if (_ids[id].internal_id == SPWFSA_SOCKET_COUNT) break;
     }
 
     if(id == SPWFSA_SOCKET_COUNT) {
@@ -209,13 +199,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
         return NSAPI_ERROR_NO_SOCKET;
     }
 
-    struct spwf_socket *socket = new struct spwf_socket;
-    if (!socket) {
-        debug_if(dbg_on, "NO Socket Error\r\n");
-        _ids[id] = false;
-        return NSAPI_ERROR_NO_SOCKET;
-    }
-
+    spwf_socket_t *socket = &_ids[id];
     socket->internal_id = id;
     socket->spwf_id = SPWFSA_SOCKET_COUNT;
     socket->proto = proto;
@@ -232,7 +216,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
  */
 nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_IS_CONNECTED;
 
@@ -264,7 +248,7 @@ nsapi_error_t SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket
 
 nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t err = NSAPI_ERROR_OK;
 
     MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
@@ -277,8 +261,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
         }
     }
 
-    _ids[socket->internal_id] = false;
-    delete socket;
+    _ids[socket->internal_id].internal_id = SPWFSA_SOCKET_COUNT;
 
     return err;
 }
@@ -292,7 +275,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
  */
 nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -314,7 +297,7 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
  */
 nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -338,7 +321,7 @@ nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned si
  */
 nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -371,7 +354,7 @@ nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &
  */
 nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t ret;
 
     CHECK_NOT_CONNECTED_ERR();
@@ -393,9 +376,8 @@ nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr
  */
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
-    struct spwf_socket *socket = (struct spwf_socket *)handle;
+    spwf_socket_t *socket = (spwf_socket_t*)handle;
     MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
-    MBED_ASSERT(_ids[socket->internal_id]);
 
     _cbs[socket->internal_id].callback = callback;
     _cbs[socket->internal_id].data = data;

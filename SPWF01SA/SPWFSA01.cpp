@@ -451,6 +451,7 @@ void SPWFSA01::_event_handler()
  * Handling OOb (+WIND:33:WiFi Network Lost)
  *
  * betzw - TODO: error handling still to be implemented!
+ * betzw - TODO: handle recursive calls correctly!
  *
  */
 void SPWFSA01::_disassociation_handler()
