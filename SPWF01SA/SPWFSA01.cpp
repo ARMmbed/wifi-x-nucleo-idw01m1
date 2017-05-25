@@ -307,6 +307,9 @@ int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
     return amount;
 }
 
+/*
+ * Handling OOb ("+WIND:55:Pending Data:%d:%d")
+ */
 void SPWFSA01::_packet_handler(void)
 {
     int id;
@@ -427,7 +430,7 @@ bool SPWFSA01::close(int id)
 }
 
 /*
- * Handling OOb (Error: Pending Data)
+ * Handling OOb ("ERROR: Pending data")
  *
  */
 void SPWFSA01::_error_handler()
@@ -450,11 +453,7 @@ void SPWFSA01::_event_handler()
 }
 
 /*
- * Handling OOb (+WIND:33:WiFi Network Lost)
- *
- * betzw - TODO: error handling still to be implemented!
- * betzw - TODO: handle recursive calls correctly!
- *
+ * Handling OOb ("+WIND:41:WiFi Disassociation: %d")
  */
 void SPWFSA01::_disassociation_handler()
 {
@@ -469,21 +468,21 @@ void SPWFSA01::_disassociation_handler()
 
     // parse out reason
     if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #1\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #1\r\n");
         goto get_out;
     }
-    debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
+    debug_if(_dbg_on, "Disassociation: %d\r\n", reason);
 
     /* trigger scan */
     if(!(_parser.send("AT+S.SCAN") && _parser.recv("OK\r")))
     {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #3\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #3\r\n");
         goto get_out;
     }
 
     if(!(_parser.send("AT+S.ROAM") && _parser.recv("OK\r")))
     {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #2\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #2\r\n");
         goto get_out;
     }
 
@@ -493,7 +492,7 @@ void SPWFSA01::_disassociation_handler()
         _release_rx_sem = true;
         while(true) {
             if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4))) {
-                debug_if(true, "Re-connected!\r\n"); // betzw - TODO: `true` only for debug!
+                debug_if(_dbg_on, "Re-connected!\r\n");
 
                 _associated_interface._connected_to_network = true;
                 _release_rx_sem = false;
@@ -501,7 +500,7 @@ void SPWFSA01::_disassociation_handler()
             } else {
                 int err;
                 if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                    debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err); // betzw - TODO: `true` only for debug!
+                    debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
 
                     _release_rx_sem = false;
                     goto get_out;
@@ -509,7 +508,7 @@ void SPWFSA01::_disassociation_handler()
             }
         }
     } else {
-        debug_if(true, "Leaving SPWFSA01::_disassociation_handler: %d\r\n", _disassoc_handler_recursive_cnt); // betzw - TODO: `true` only for debug!
+        debug_if(_dbg_on, "Leaving SPWFSA01::_disassociation_handler: %d\r\n", _disassoc_handler_recursive_cnt);
         goto get_out;
     }
 
@@ -523,7 +522,7 @@ get_out:
  * Handling OOB (+WIND:58)
  * when server closes a client connection
  */
-// betzw - TODO
+// betzw - TODO/TO_CHECK
 void SPWFSA01::_sock_disconnected()
 {
     int id;
