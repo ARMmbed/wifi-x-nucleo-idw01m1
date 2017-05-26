@@ -462,6 +462,11 @@ void SPWFSA01::_disassociation_handler()
     uint32_t n1, n2, n3, n4;
     int saved_timeout = _timeout;
 
+#ifndef NDEBUG
+    static unsigned int disassoc_cnt = 0;
+    disassoc_cnt++;
+#endif
+
     _associated_interface._connected_to_network = false;
 
     _disassoc_handler_recursive_cnt++;
@@ -514,6 +519,12 @@ void SPWFSA01::_disassociation_handler()
     }
 
 get_out:
+#ifndef NDEBUG
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
+#else
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler\r\n"); // betzw - TODO: `true` only for debug!
+#endif
+
     setTimeout(saved_timeout);
     _disassoc_handler_recursive_cnt--;
     return;
