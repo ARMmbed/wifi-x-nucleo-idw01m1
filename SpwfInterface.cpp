@@ -47,20 +47,10 @@
  * @retval none
  */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-: _spwf(tx, rx, *this, debug),
-  dbg_on(debug),
-  _connected_to_network(false)
+    : _spwf(tx, rx, *this, debug),
+      _dbg_on(debug)
 {
-    memset(_ids, 0, sizeof(_ids));
-    memset(_cbs, 0, sizeof(_cbs));
-
-    for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-        _ids[i].internal_id = SPWFSA_SOCKET_COUNT;
-    }
-
-    _spwf.attach(this, &SpwfSAInterface::event);
-
-    isInitialized = false;
+    inner_constructor();
 }
 
 /**
@@ -104,10 +94,10 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
     int mode;
 
     //initialize the device before connecting
-    if(!isInitialized)
+    if(!_isInitialized)
     {
         if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
-        isInitialized=true;
+        _isInitialized=true;
     }
 
     switch(security)
@@ -203,7 +193,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
     }
 
     if(id == SPWFSA_SOCKET_COUNT) {
-        debug_if(dbg_on, "NO Socket ID Error\r\n");
+        debug_if(_dbg_on, "NO Socket ID Error\r\n");
         return NSAPI_ERROR_NO_SOCKET;
     }
 
@@ -259,7 +249,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t err = NSAPI_ERROR_OK;
 
-    MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
+    if(socket->internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
@@ -385,7 +375,8 @@ nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
-    MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
+
+    if(socket->internal_id == SPWFSA_SOCKET_COUNT) return; // might happen after module hard fault
 
     _cbs[socket->internal_id].callback = callback;
     _cbs[socket->internal_id].data = data;

@@ -47,7 +47,7 @@
 #define SPWF_SEND_TIMEOUT       500
 #define SPWF_RECV_TIMEOUT       10
 #define SPWF_MISC_TIMEOUT       500
-#define SPWF_DISASSOC_TIMEOUT   1500
+#define SPWF_DISASSOC_TIMEOUT   3000
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
@@ -110,12 +110,10 @@ private:
         SocketAddress addr;
     } spwf_socket_t;
 
-    nsapi_error_t         init(void);
-
     SPWFSA01 _spwf;
 
-    bool isInitialized;
-    bool dbg_on;
+    bool _isInitialized;
+    bool _dbg_on;
     bool _connected_to_network;
 
     struct {
@@ -124,10 +122,26 @@ private:
     } _cbs[SPWFSA_SOCKET_COUNT];
     spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
 
-    void event(void);
-
 private:
     friend class SPWFSA01;
+
+private:
+    void event(void);
+    nsapi_error_t init(void);
+
+    void inner_constructor() {
+        memset(_ids, 0, sizeof(_ids));
+        memset(_cbs, 0, sizeof(_cbs));
+
+        for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
+            _ids[i].internal_id = SPWFSA_SOCKET_COUNT;
+        }
+
+        _spwf.attach(this, &SpwfSAInterface::event);
+
+        _connected_to_network = false;
+        _isInitialized = false;
+    }
 };
 
 #define CHECK_NOT_CONNECTED_ERR() { \
