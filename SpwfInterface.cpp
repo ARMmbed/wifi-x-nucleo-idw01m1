@@ -384,7 +384,7 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
 
 void SpwfSAInterface::event(void) {
     for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-        if (_cbs[i].callback) {
+        if (_cbs[i].callback && (_ids[i].internal_id != SPWFSA_SOCKET_COUNT)) {
             _cbs[i].callback(_cbs[i].data);
         }
     }
