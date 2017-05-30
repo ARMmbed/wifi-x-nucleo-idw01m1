@@ -85,7 +85,7 @@ public:
     const char *getMACAddress(void);
 
     /**
-     * Check if SPWFSA01 is conenected
+     * Check if SPWFSA01 is connected
      *
      * @return true only if the chip has an IP address
      */
@@ -188,6 +188,7 @@ private:
     void _packet_handler();
     void _error_handler();
     void _disassociation_handler();
+    void _hard_fault_handler();
     void _event_handler();
     void _sock_disconnected();
     void _wait_console_active();

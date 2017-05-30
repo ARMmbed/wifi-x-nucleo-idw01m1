@@ -86,6 +86,8 @@ bool SPWFSA01::startup(int mode)
     _parser.oob("+WIND:55:", this, &SPWFSA01::_packet_handler);
     _parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
     _parser.oob("+WIND:41:", this, &SPWFSA01::_disassociation_handler);
+    _parser.oob("+WIND:8:Hard Fault:", this, &SPWFSA01::_hard_fault_handler);
+    
     // betzw - TODO: _parser.oob("+WIND:58:", this, &SPWFSA01::_sock_disconnected);
 
     return true;
@@ -221,7 +223,7 @@ const char *SPWFSA01::getMACAddress(void)
 
 bool SPWFSA01::isConnected(void)
 {
-    return getIPAddress() != 0;
+    return _associated_interface._connected_to_network;
 }
 
 bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
@@ -307,9 +309,6 @@ int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
     return amount;
 }
 
-/*
- * Handling OOb ("+WIND:55:Pending Data:%d:%d")
- */
 void SPWFSA01::_packet_handler(void)
 {
     int id;
@@ -403,7 +402,7 @@ bool SPWFSA01::close(int id)
 {
     int amount;
 
-    MBED_ASSERT(id != SPWFSA_SOCKET_COUNT);
+    if(id == SPWFSA_SOCKET_COUNT) return false;
 
     // Flush out pending data
     while(true) {
@@ -430,7 +429,7 @@ bool SPWFSA01::close(int id)
 }
 
 /*
- * Handling OOb ("ERROR: Pending data")
+ * Handling oob ("Error: Pending Data")
  *
  */
 void SPWFSA01::_error_handler()
@@ -453,13 +452,19 @@ void SPWFSA01::_event_handler()
 }
 
 /*
- * Handling OOb ("+WIND:41:WiFi Disassociation: %d")
+ * Handling oob ("+WIND:33:WiFi Network Lost")
+ *
  */
 void SPWFSA01::_disassociation_handler()
 {
     int reason;
     uint32_t n1, n2, n3, n4;
     int saved_timeout = _timeout;
+
+#ifndef NDEBUG
+    static unsigned int disassoc_cnt = 0;
+    disassoc_cnt++;
+#endif
 
     _associated_interface._connected_to_network = false;
 
@@ -492,7 +497,7 @@ void SPWFSA01::_disassociation_handler()
         _release_rx_sem = true;
         while(true) {
             if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4))) {
-                debug_if(_dbg_on, "Re-connected!\r\n");
+                debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                 _associated_interface._connected_to_network = true;
                 _release_rx_sem = false;
@@ -513,16 +518,53 @@ void SPWFSA01::_disassociation_handler()
     }
 
 get_out:
+#ifndef NDEBUG
+    debug_if(_dbg_on, "Getting out of SPWFSA01::_disassociation_handler: %d\r\n", disassoc_cnt);
+#else
+    debug_if(_dbg_on, "Getting out of SPWFSA01::_disassociation_handler\r\n");
+#endif
+
     setTimeout(saved_timeout);
     _disassoc_handler_recursive_cnt--;
     return;
 }
 
 /*
- * Handling OOB (+WIND:58)
+ * Handling oob ("+WIND:8:Hard Fault")
+ *
+ */
+void SPWFSA01::_hard_fault_handler()
+{
+    int console_nr = -1;
+    int reg0 = 0xFFFFFFFF,
+            reg1 = 0xFFFFFFFF,
+            reg2 = 0xFFFFFFFF,
+            reg3 = 0xFFFFFFFF,
+            reg12 = 0xFFFFFFFF;
+
+    setTimeout(SPWF_RECV_TIMEOUT);
+    _parser.recv("Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\r",
+                 &console_nr,
+                 &reg0, &reg1, &reg2, &reg3, &reg12);
+#ifndef NDEBUG
+    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+          console_nr,
+          reg0, reg1, reg2, reg3, reg12);
+#else // NDEBUG
+    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+          console_nr,
+          reg0, reg1, reg2, reg3, reg12);
+
+    // This is most likely the best we can to recover from this module hard fault
+    _associated_interface.inner_constructor();
+#endif // NDEBUG
+}
+
+/*
+ * Handling oob ("+WIND:58")
  * when server closes a client connection
  */
-// betzw - TODO/TO_CHECK
+// betzw - TODO
 void SPWFSA01::_sock_disconnected()
 {
     int id;
