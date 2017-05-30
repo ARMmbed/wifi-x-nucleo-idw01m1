@@ -87,8 +87,7 @@ bool SPWFSA01::startup(int mode)
     _parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
     _parser.oob("+WIND:41:", this, &SPWFSA01::_disassociation_handler);
     _parser.oob("+WIND:8:Hard Fault:", this, &SPWFSA01::_hard_fault_handler);
-    
-    // betzw - TODO: _parser.oob("+WIND:58:", this, &SPWFSA01::_sock_disconnected);
+    _parser.oob("+WIND:58:", this, &SPWFSA01::_sock_closed);
 
     return true;
 }
@@ -564,19 +563,19 @@ void SPWFSA01::_hard_fault_handler()
  * Handling oob ("+WIND:58")
  * when server closes a client connection
  */
-// betzw - TODO
-void SPWFSA01::_sock_disconnected()
+void SPWFSA01::_sock_closed()
 {
     int id;
     if(!(_parser.recv("Socket Closed:%d\r",&id)))
         return;
 
-    // if we are closing socket by ourselves then the value of _cbs and _ids need to be changed..how ?
-    //		_spwfinterface.set_cbs(id,0,0);
-    //_spwfinterface.close();
-    close(id);
-
-    //@todo actual socket close....to call spwfsa01::close close or spwfInterface::close 
+    for(int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
+        if(_associated_interface._ids[i].spwf_id == id) {
+            _associated_interface._ids[i].internal_id = SPWFSA_SOCKET_COUNT;
+            _associated_interface._ids[i].spwf_id = SPWFSA_SOCKET_COUNT;
+            break;
+        }
+    }
 }
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)

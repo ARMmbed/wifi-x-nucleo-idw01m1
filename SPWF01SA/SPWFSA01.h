@@ -190,7 +190,7 @@ private:
     void _disassociation_handler();
     void _hard_fault_handler();
     void _event_handler();
-    void _sock_disconnected();
+    void _sock_closed();
     void _wait_console_active();
     int _read_in(char*, int, uint32_t);
     int _read_len(int);

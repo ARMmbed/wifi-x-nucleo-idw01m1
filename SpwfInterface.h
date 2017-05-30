@@ -116,11 +116,11 @@ private:
     bool _dbg_on;
     bool _connected_to_network;
 
+    spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
     struct {
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
-    spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
 
 private:
     friend class SPWFSA01;
@@ -135,6 +135,7 @@ private:
 
         for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
             _ids[i].internal_id = SPWFSA_SOCKET_COUNT;
+            _ids[i].spwf_id = SPWFSA_SOCKET_COUNT;
         }
 
         _spwf.attach(this, &SpwfSAInterface::event);

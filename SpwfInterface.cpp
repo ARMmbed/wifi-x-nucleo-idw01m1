@@ -226,6 +226,7 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
+    socket->addr = addr;
     return NSAPI_ERROR_OK;
 }
 
@@ -260,6 +261,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
     }
 
     _ids[socket->internal_id].internal_id = SPWFSA_SOCKET_COUNT;
+    _ids[socket->internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 
     return err;
 }
@@ -336,7 +338,6 @@ nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &
         if (err < 0) {
             return err;
         }
-        socket->addr = addr;
     }
 
     return socket_send(socket, data, size);
