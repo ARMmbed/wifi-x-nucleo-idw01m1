@@ -177,6 +177,8 @@ private:
     int _timeout;
     bool _dbg_on;
     SpwfSAInterface &_associated_interface;
+    Callback<int(char*, int)> _parser_func;
+    Callback<int(char*, int)> _flush_func;
 
     struct packet {
         struct packet *next;
@@ -186,11 +188,11 @@ private:
     } *_packets, **_packets_end;
 
     void _packet_handler();
-    void _error_handler();
+    void _pending_data_handler();
     void _disassociation_handler();
     void _hard_fault_handler();
     void _event_handler();
-    void _sock_closed();
+    void _sock_closed_handler();
     void _wait_console_active();
     int _read_in(char*, int, uint32_t);
     int _read_len(int);

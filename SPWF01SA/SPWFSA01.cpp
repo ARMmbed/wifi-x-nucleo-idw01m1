@@ -26,11 +26,19 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _callback_func(),
   _timeout(0), _dbg_on(debug),
   _associated_interface(ifce),
+  _parser_func(&_parser, &ATParser::read),
+  _flush_func(this, &SPWFSA01::_flush_in),
   _packets(0), _packets_end(&_packets)
 {
     _serial.baud(115200);
     _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
     _parser.debugOn(debug);
+
+    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler);
+    _parser.oob("+WIND:41:WiFi Disassociation", this, &SPWFSA01::_disassociation_handler);
+    _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
+    _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
 }
 
 bool SPWFSA01::startup(int mode)
@@ -82,12 +90,6 @@ bool SPWFSA01::startup(int mode)
         return false;
     }
 #endif
-
-    _parser.oob("+WIND:55:", this, &SPWFSA01::_packet_handler);
-    _parser.oob("ERROR: Pending ", this, &SPWFSA01::_error_handler);
-    _parser.oob("+WIND:41:", this, &SPWFSA01::_disassociation_handler);
-    _parser.oob("+WIND:8:Hard Fault:", this, &SPWFSA01::_hard_fault_handler);
-    _parser.oob("+WIND:58:", this, &SPWFSA01::_sock_closed);
 
     return true;
 }
@@ -289,18 +291,16 @@ int SPWFSA01::_flush_in(char* buffer, int size) {
 }
 
 int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
-    Callback<int(char*, int)> read_func;
+    Callback<int(char*, int)> *read_func;
 
     if(buffer != NULL) {
-        Callback<int(char*, int)> parser_func(&_parser, &ATParser::read);
-        read_func = parser_func;
+        read_func = &_parser_func;
     } else {
-        Callback<int(char*, int)> flush_func(this, &SPWFSA01::_flush_in);
-        read_func = flush_func;
+        read_func = &_flush_func;
     }
 
     if (!(_parser.send("AT+S.SOCKR=%d,%d", id, amount)
-            && (read_func(buffer, amount) > 0)
+            && ((*read_func)(buffer, amount) > 0)
             && _parser.recv("OK\r"))) {
         return -1;
     }
@@ -316,7 +316,7 @@ void SPWFSA01::_packet_handler(void)
     struct packet *packet = NULL;
 
     // parse out the socket id
-    if (!_parser.recv("Pending Data:%d:%d\r", &id, &total_amount)) {
+    if (!_parser.recv(":%d:%d\r", &id, &total_amount)) {
         return;
     }
 
@@ -431,9 +431,10 @@ bool SPWFSA01::close(int id)
  * Handling oob ("Error: Pending Data")
  *
  */
-void SPWFSA01::_error_handler()
+void SPWFSA01::_pending_data_handler()
 {
-    error("\r\n SPWFSA01::_error_handler()\r\n");
+    /* should never happen */
+    error("\r\n SPWFSA01::_pending_data_handler()\r\n");
 }
 
 /*
@@ -471,7 +472,7 @@ void SPWFSA01::_disassociation_handler()
     setTimeout(SPWF_DISASSOC_TIMEOUT);
 
     // parse out reason
-    if (!_parser.recv("WiFi Disassociation: %d\r", &reason)) {
+    if (!_parser.recv(": %d\r", &reason)) {
         debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #1\r\n"); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
@@ -542,7 +543,7 @@ void SPWFSA01::_hard_fault_handler()
             reg12 = 0xFFFFFFFF;
 
     setTimeout(SPWF_RECV_TIMEOUT);
-    _parser.recv("Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\r",
+    _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\r",
                  &console_nr,
                  &reg0, &reg1, &reg2, &reg3, &reg12);
 #ifndef NDEBUG
@@ -563,10 +564,10 @@ void SPWFSA01::_hard_fault_handler()
  * Handling oob ("+WIND:58")
  * when server closes a client connection
  */
-void SPWFSA01::_sock_closed()
+void SPWFSA01::_sock_closed_handler()
 {
     int id;
-    if(!(_parser.recv("Socket Closed:%d\r",&id)))
+    if(!(_parser.recv(":%d\r",&id)))
         return;
 
     for(int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
