@@ -173,10 +173,11 @@ private:
     rtos::Semaphore _rx_sem;
     bool _release_rx_sem;
     int _disassoc_handler_recursive_cnt;
-    Callback<void()> _callback_func;
     int _timeout;
     bool _dbg_on;
+    int _total_pending_data;
     SpwfSAInterface &_associated_interface;
+    Callback<void()> _callback_func;
     Callback<int(char*, int)> _parser_func;
     Callback<int(char*, int)> _flush_func;
 
@@ -197,6 +198,17 @@ private:
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);
+    int _block_async_indications(void);
+    void _set_pending_data(int spwf_id, int amount);
+    void _dec_pending_data(int spwf_id, int amount);
+    void _read_in_pending(void);
+    bool _read_in_packet(int spwf_id, int amount);
+    void _free_packets(int spwf_id);
+
+    bool _pending_data() {
+        if(_total_pending_data != 0) return true;
+        else return false;
+    }
 
     char _ip_buffer[16];
     char _mac_buffer[18];

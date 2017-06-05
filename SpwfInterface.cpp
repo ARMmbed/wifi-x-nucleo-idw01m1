@@ -186,19 +186,19 @@ const char *SpwfSAInterface::get_mac_address()
  */
 nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
-    int id;
+    int internal_id;
 
-    for (id = 0; id < SPWFSA_SOCKET_COUNT; id++) {
-        if (_ids[id].internal_id == SPWFSA_SOCKET_COUNT) break;
+    for (internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
+        if (_ids[internal_id].internal_id == SPWFSA_SOCKET_COUNT) break;
     }
 
-    if(id == SPWFSA_SOCKET_COUNT) {
+    if(internal_id == SPWFSA_SOCKET_COUNT) {
         debug_if(_dbg_on, "NO Socket ID Error\r\n");
         return NSAPI_ERROR_NO_SOCKET;
     }
 
-    spwf_socket_t *socket = &_ids[id];
-    socket->internal_id = id;
+    spwf_socket_t *socket = &_ids[internal_id];
+    socket->internal_id = internal_id;
     socket->spwf_id = SPWFSA_SOCKET_COUNT;
     socket->proto = proto;
 
@@ -216,6 +216,8 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
+    MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
+
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_IS_CONNECTED;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
@@ -226,6 +228,7 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
+    _internal_ids[socket->spwf_id] = socket->internal_id;
     socket->addr = addr;
     return NSAPI_ERROR_OK;
 }
@@ -249,8 +252,9 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t err = NSAPI_ERROR_OK;
+    int internal_id = socket->internal_id;
 
-    if(socket->internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
+    if(internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
 
@@ -260,8 +264,8 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
         }
     }
 
-    _ids[socket->internal_id].internal_id = SPWFSA_SOCKET_COUNT;
-    _ids[socket->internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+    _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
+    _ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 
     return err;
 }
@@ -384,9 +388,9 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
 }
 
 void SpwfSAInterface::event(void) {
-    for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-        if (_cbs[i].callback && (_ids[i].internal_id != SPWFSA_SOCKET_COUNT)) {
-            _cbs[i].callback(_cbs[i].data);
+    for (int internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
+        if (_cbs[internal_id].callback && (_ids[internal_id].internal_id != SPWFSA_SOCKET_COUNT)) {
+            _cbs[internal_id].callback(_cbs[internal_id].data);
         }
     }
 }

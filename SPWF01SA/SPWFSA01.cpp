@@ -19,13 +19,13 @@
 #include "mbed_debug.h"
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, 2048), _parser(_serial, "\r", "\n"),
+: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\r", "\n"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rx_sem(0), _release_rx_sem(false),
   _disassoc_handler_recursive_cnt(-1),
-  _callback_func(),
-  _timeout(0), _dbg_on(debug),
+  _timeout(0), _dbg_on(debug), _total_pending_data(0),
   _associated_interface(ifce),
+  _callback_func(),
   _parser_func(&_parser, &ATParser::read),
   _flush_func(this, &SPWFSA01::_flush_in),
   _packets(0), _packets_end(&_packets)
@@ -227,7 +227,7 @@ bool SPWFSA01::isConnected(void)
     return _associated_interface._connected_to_network;
 }
 
-bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
+bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
 
@@ -239,7 +239,7 @@ bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
 
     if( _parser.recv(" ID: %d\r", &socket_id)
             && _parser.recv("OK\r")) {
-        *id = socket_id;
+        *spwf_id = socket_id;
         return true;
     }
 
@@ -247,14 +247,14 @@ bool SPWFSA01::open(const char *type, int* id, const char* addr, int port)
 }
 
 #define SPWFSA01_MAX_WRITE 4096U
-bool SPWFSA01::send(int id, const void *data, uint32_t amount)
+bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
 
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
-        if (!(_parser.send("AT+S.SOCKW=%d,%d", id, (unsigned int)to_send)
+        if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                 && (_parser.write((char*)data, (int)to_send) == (int)to_send)
                 && _parser.recv("OK\r"))) {
             // betzw - TODO: handle different errors more accurately!
@@ -267,11 +267,13 @@ bool SPWFSA01::send(int id, const void *data, uint32_t amount)
     return true;
 }
 
-int SPWFSA01::_read_len(int id) {
+int SPWFSA01::_read_len(int spwf_id) {
     uint32_t amount;
 
-    if (!(_parser.send("AT+S.SOCKQ=%d", id)
-            && _parser.recv(" DATALEN: %u\r", &amount))) {
+    if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
+            && _parser.recv(" DATALEN: %u\r", &amount)
+            && _parser.recv("OK\r")
+            && (_parser.getc() == '\n'))) {
         return -1;
     }
 
@@ -290,71 +292,153 @@ int SPWFSA01::_flush_in(char* buffer, int size) {
     return i;
 }
 
-int SPWFSA01::_read_in(char* buffer, int id, uint32_t amount) {
+int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     Callback<int(char*, int)> *read_func;
+    int ret;
 
+    /* determine which function to use for reading in data */
     if(buffer != NULL) {
         read_func = &_parser_func;
     } else {
         read_func = &_flush_func;
     }
 
-    if (!(_parser.send("AT+S.SOCKR=%d,%d", id, amount)
+    /* block asynchronous indications */
+    ret = _block_async_indications();
+    if(ret != 0) return -1;
+
+    /* read in data */
+    if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
             && ((*read_func)(buffer, amount) > 0)
             && _parser.recv("OK\r"))) {
         return -1;
     }
 
+    /* adjust pending data values */
+    _dec_pending_data(spwf_id, amount);
+
     return amount;
+}
+
+/* Note: in case of error (return -1) blocking has been (tried to be) lifted */
+int SPWFSA01::_block_async_indications() {
+    int iret;
+    bool bret;
+
+    /* Send 'AT' without delimiter */
+    iret = _parser.printf("AT");
+    if(iret <= 0) return -1;
+
+    /* Wait for command being sent */
+    {
+        Timer timer;
+        timer.start();
+
+        while (_serial.pending()) {
+            if (timer.read_ms() > _timeout) {
+                /* try to unblock asynchronous indications */
+                _parser.send("");
+                _parser.recv("OK\r");
+                return -1;
+            }
+        }
+    }
+
+    /* Read all pending indications (treating pending data in a special way) */
+    while(_serial.readable()) {
+        bret = _parser.recv("+WIND:55:");
+        if(bret) {
+            int spwf_id;
+            int amount;
+
+            bret = _parser.recv("Pending Data:%d:%d\r", &spwf_id, &amount);
+            if(bret) {
+                /* set amount of pending data */
+                _set_pending_data(spwf_id, amount);
+            }
+        }
+    }
+
+    return 0;
 }
 
 void SPWFSA01::_packet_handler(void)
 {
-    int id;
-    int total_amount;
-    int current_amount;
-    struct packet *packet = NULL;
+    int spwf_id;
+    int amount;
 
-    // parse out the socket id
-    if (!_parser.recv(":%d:%d\r", &id, &total_amount)) {
+    /* parse out the socket id & amount */
+    if (!_parser.recv(":%d:%d\r", &spwf_id, &amount)) {
         return;
     }
 
-    /* cannot do read without query as in WIND:55 the length of data gets adding up and the actual data may be less at any given time */
-    while(total_amount > 0) {
-        if ((current_amount = _read_len(id)) <= 0) {
-            if(packet != NULL) free(packet);
-            return; //no more data to be read
+    /* set amount of pending data */
+    _set_pending_data(spwf_id, amount);
+
+    /* read in data for specified socket */
+    if((amount > 0) && !_read_in_packet(spwf_id, amount)) return; /* out of memory: give up here! */
+
+    /* read in other eventually pending packages */
+    _read_in_pending();
+
+    /* send 'AT' command to trigger an 'OK' response */
+    _parser.send("AT");
+}
+
+void SPWFSA01::_read_in_pending(void) {
+    static int internal_id_cnt = 0;
+
+    while(_pending_data()) {
+        int amount;
+
+        if((amount = _associated_interface._ids[internal_id_cnt].pending_data) > 0) {
+            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
+
+            if(!_read_in_packet(spwf_id, amount)) return; /* out of memory: give up here! */
         }
 
-        if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
-            if(packet != NULL) free(packet);
-            return;
-        }
+        internal_id_cnt++;
+        internal_id_cnt %= SPWFSA_SOCKET_COUNT;
+    }
+}
 
-        if(packet == NULL) {
-            packet = (struct packet*)malloc(
-                    sizeof(struct packet) + total_amount);
-            if (!packet) {
-                return;
-            }
-
-            packet->id = id;
-            packet->len = (uint32_t)total_amount;
-            packet->next = 0;
-        }
-
-        if(!(_read_in((char*)(packet + 1), id, (uint32_t)current_amount) > 0)) {
-            free(packet);
-            return;
-        }
-
-        total_amount -= current_amount;
+bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
+    struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
+    if (!packet) {
+        return false; /* out of memory: give up here! */
     }
 
-    // append to packet list
-    *_packets_end = packet;
-    _packets_end = &packet->next;
+    /* init packet */
+    packet->id = spwf_id;
+    packet->len = (uint32_t)amount;
+    packet->next = 0;
+
+    /* read data in */
+    if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
+        free(packet);
+    } else {
+        /* append to packet list */
+        *_packets_end = packet;
+        _packets_end = &packet->next;
+    }
+
+    return true;
+}
+
+void SPWFSA01::_free_packets(int spwf_id) {
+    // check if any packets are ready for `spwf_id`
+    for(struct packet **p = &_packets; *p;) {
+        if ((*p)->id == spwf_id) {
+            struct packet *q = *p;
+            if (_packets_end == &(*p)->next) {
+                _packets_end = p;
+            }
+            *p = (*p)->next;
+            free(q);
+        } else {
+            p = &(*p)->next;
+        }
+    }
 }
 
 /**
@@ -362,13 +446,13 @@ void SPWFSA01::_packet_handler(void)
  *	Recv Function
  *
  */
-int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
+int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
     while (true) {
         // check if any packets are ready for us
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
-            if ((*p)->id == id) {
-                debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",id,(*p)->len);
+            if ((*p)->id == spwf_id) {
+                debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -397,34 +481,41 @@ int32_t SPWFSA01::recv(int id, void *data, uint32_t amount)
     }
 }
 
-bool SPWFSA01::close(int id)
+bool SPWFSA01::close(int spwf_id)
 {
     int amount;
+    bool ret = false;
 
-    if(id == SPWFSA_SOCKET_COUNT) return false;
+    if(spwf_id == SPWFSA_SOCKET_COUNT) return false;
 
     // Flush out pending data
     while(true) {
-        if((amount = _read_len(id)) < 0) return false;
-
-        if(!_parser.recv("OK\r") || (_parser.getc() != '\n')) {
-            return false;
-        }
+        if((amount = _read_len(spwf_id)) < 0) goto read_in_pending;
 
         if(amount == 0) break; // no more data to be read
 
-        if(!(_read_in((char*)NULL, id, (uint32_t)amount) > 0)) {
-            return false;
+        if(!(_read_in((char*)NULL, spwf_id, (uint32_t)amount) > 0)) {
+            goto read_in_pending;
         }
     }
 
     // Close socket
-    if (_parser.send("AT+S.SOCKC=%d", id)
+    if (_parser.send("AT+S.SOCKC=%d", spwf_id)
             && _parser.recv("OK\r")) {
-        return true;
+        ret = true;
+        goto read_in_pending;
     }
 
-    return false;
+read_in_pending:
+    /* read in pending data */
+    _read_in_pending();
+
+    if(ret) {
+        /* free packets for this socket */
+        _free_packets(spwf_id);
+    }
+
+    return ret;
 }
 
 /*
@@ -433,8 +524,11 @@ bool SPWFSA01::close(int id)
  */
 void SPWFSA01::_pending_data_handler()
 {
-    /* should never happen */
+#ifndef NDEBUG
     error("\r\n SPWFSA01::_pending_data_handler()\r\n");
+#else // NDEBUG
+    debug("\r\n SPWFSA01::_pending_data_handler()\r\n");
+#endif // NDEBUG
 }
 
 /*
@@ -520,9 +614,9 @@ void SPWFSA01::_disassociation_handler()
 get_out:
 #ifndef NDEBUG
     debug_if(true, "Getting out of SPWFSA01::_disassociation_handler: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
-#else
+#else // NDEBUG
     debug_if(true, "Getting out of SPWFSA01::_disassociation_handler\r\n"); // betzw - TODO: `true` only for debug!
-#endif
+#endif // NDEBUG
 
     setTimeout(saved_timeout);
     _disassoc_handler_recursive_cnt--;
@@ -566,17 +660,17 @@ void SPWFSA01::_hard_fault_handler()
  */
 void SPWFSA01::_sock_closed_handler()
 {
-    int id;
-    if(!(_parser.recv(":%d\r",&id)))
-        return;
+    int spwf_id, internal_id;
 
-    for(int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-        if(_associated_interface._ids[i].spwf_id == id) {
-            _associated_interface._ids[i].internal_id = SPWFSA_SOCKET_COUNT;
-            _associated_interface._ids[i].spwf_id = SPWFSA_SOCKET_COUNT;
-            break;
-        }
+    if(!(_parser.recv(":%d\r",&spwf_id))) {
+        return;
     }
+
+    _free_packets(spwf_id);
+
+    internal_id = _associated_interface.get_internal_id(spwf_id);
+    _associated_interface._ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
+    _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 }
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)
@@ -599,3 +693,23 @@ void SPWFSA01::attach(Callback<void()> func)
 {
     _callback_func = func;
 }
+
+void SPWFSA01::_set_pending_data(int spwf_id, int amount) {
+    int internal_id = _associated_interface.get_internal_id(spwf_id);
+
+    if(amount > _associated_interface._ids[internal_id].pending_data) {
+        _total_pending_data += amount - _associated_interface._ids[internal_id].pending_data;
+        _associated_interface._ids[internal_id].pending_data = amount;
+    }
+}
+
+void SPWFSA01::_dec_pending_data(int spwf_id, int amount) {
+    int internal_id = _associated_interface.get_internal_id(spwf_id);
+
+    MBED_ASSERT((amount >= _total_pending_data) &&
+                (amount >= _associated_interface._ids[internal_id].pending_data));
+
+    _total_pending_data -= amount;
+    _associated_interface._ids[internal_id].pending_data -= amount;
+}
+
