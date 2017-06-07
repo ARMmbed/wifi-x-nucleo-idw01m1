@@ -175,11 +175,10 @@ private:
     int _disassoc_handler_recursive_cnt;
     int _timeout;
     bool _dbg_on;
+    bool _send_at;
     int _total_pending_data;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
-    Callback<int(char*, int)> _parser_func;
-    Callback<int(char*, int)> _flush_func;
 
     struct packet {
         struct packet *next;
