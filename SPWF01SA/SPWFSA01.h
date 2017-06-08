@@ -176,7 +176,7 @@ private:
     int _timeout;
     bool _dbg_on;
     bool _send_at;
-    bool _read_in_blocked;
+    bool _read_in_pending_blocked;
     int _total_pending_data;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
@@ -203,7 +203,6 @@ private:
     void _read_in_pending(void);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
-    bool _send_recv_ok(const char *command, ...);
 
     bool _recv_delim() {
         return (_parser.getc() == '\n');
@@ -213,13 +212,18 @@ private:
         return _parser.recv("OK\r") && _recv_delim();
     }
 
-    void _block_read_in() {
-        _read_in_blocked = true;
+    void _block_read_in_pending() {
+        MBED_ASSERT(!_read_in_pending_blocked);
+        _read_in_pending_blocked = true;
     }
 
-    void _unblock_read_in() {
-        _read_in_blocked = false;
-        _read_in_pending();
+    void _unblock_read_in_pending() {
+        MBED_ASSERT(_read_in_pending_blocked);
+        _read_in_pending_blocked = false;
+    }
+
+    bool _is_read_in_pending_blocked() {
+        return _read_in_pending_blocked;
     }
 
     bool _pending_data() {

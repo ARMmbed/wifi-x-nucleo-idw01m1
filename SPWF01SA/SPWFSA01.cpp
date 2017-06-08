@@ -24,7 +24,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _rx_sem(0), _release_rx_sem(false),
   _disassoc_handler_recursive_cnt(-1),
   _timeout(0), _dbg_on(debug),
-  _send_at(false), _read_in_blocked(false),
+  _send_at(false), _read_in_pending_blocked(false),
   _total_pending_data(0),
   _associated_interface(ifce),
   _callback_func(),
@@ -250,6 +250,10 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
+    bool ret = true;
+
+    /* block from calling `read_in()` recursively */
+    _block_read_in_pending();
 
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
@@ -258,30 +262,36 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
                 && (_parser.write((char*)data, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
             // betzw - TODO: handle different errors more accurately!
-            return false;
+            ret = false;
+            break;
         }
 
         sent += to_send;
     }
 
-    return true;
+    /* unblock `read_in()` */
+    _unblock_read_in_pending();
+
+    /* read in eventually pending data */
+    _read_in_pending();
+
+    return ret;
 }
 
 int SPWFSA01::_read_len(int spwf_id) {
     uint32_t amount;
-    int ret;
 
-    /* block asynchronous indications */
-    ret = _block_async_indications();
-    if(ret != 0) return -1;
+    /* block from calling `read_in()` recursively */
+    _block_read_in_pending();
 
-    if (!(_parser.send("+S.SOCKQ=%d", spwf_id)
+    if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(" DATALEN: %u\r", &amount)
             && _recv_ok())) {
         return -1;
     }
 
-    /* Note: block of async indications has been lifted at this point */
+    /* unblock `read_in()` */
+    _unblock_read_in_pending();
 
     /* adjust pending data values */
     _set_pending_data(spwf_id, amount);
@@ -379,6 +389,8 @@ void SPWFSA01::_packet_handler(void)
     /* set amount of pending data */
     _set_pending_data(spwf_id, amount);
 
+    if(_is_read_in_pending_blocked()) return;
+
     /* read in other eventually pending packages */
     _read_in_pending();
 
@@ -392,7 +404,7 @@ void SPWFSA01::_packet_handler(void)
 void SPWFSA01::_read_in_pending(void) {
     static int internal_id_cnt = 0;
 
-    if(_read_in_blocked) return;
+    MBED_ASSERT(!_is_read_in_pending_blocked());
 
     while(_pending_data()) {
         int amount;
@@ -465,7 +477,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
     bool ret;
 
     while (true) {
-        // check if any packets are ready for us
+        /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
                 debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
@@ -490,10 +502,12 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             }
         }
 
-        // Wait for inbound packet
+        /* wait for incoming packet */
         _send_at = true;
         ret = !_recv_ok();
         _send_at = false;
+
+        /* handle return value */
         if (ret) {
             return -1;
         }
@@ -526,7 +540,7 @@ bool SPWFSA01::close(int spwf_id)
     }
 
 read_in_pending:
-    /* read in pending data */
+    /* read in eventually pending data */
     _read_in_pending();
 
     if(ret) {
@@ -723,38 +737,4 @@ void SPWFSA01::_set_pending_data(int spwf_id, int amount) {
 
     MBED_ASSERT((_total_pending_data >= 0) &&
                 (_associated_interface._ids[internal_id].pending_data >= 0));
-}
-
-bool SPWFSA01::_send_recv_ok(const char *command, ...) {
-    va_list args;
-    va_start(args, command);
-
-    int iret;
-    bool bret = false;
-    int saved_timeout = _timeout;
-
-    /* block asynchronous indications */
-    setTimeout(SPWF_RECV_TIMEOUT);
-    iret = _block_async_indications();
-    setTimeout(saved_timeout);
-
-    if(iret == 0) {
-        bret = _parser.vsend(command, args) && _recv_ok();
-    }
-
-#ifndef NDEBUG // betzw: just for being able to set a breakpoint
-    if(!bret) {
-        bret = false;
-    }
-#endif // !NDEBUG
-
-    /* Note: block of async indications has been lifted at this point */
-
-    /* read in pending data */
-    setTimeout(SPWF_RECV_TIMEOUT);
-    _read_in_pending();
-    setTimeout(saved_timeout);
-
-    va_end(args);
-    return bret;
 }
