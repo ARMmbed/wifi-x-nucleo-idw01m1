@@ -173,10 +173,13 @@ private:
     rtos::Semaphore _rx_sem;
     bool _release_rx_sem;
     int _disassoc_handler_recursive_cnt;
-    Callback<void()> _callback_func;
     int _timeout;
     bool _dbg_on;
+    bool _send_at;
+    bool _read_in_pending_blocked;
+    int _total_pending_data;
     SpwfSAInterface &_associated_interface;
+    Callback<void()> _callback_func;
 
     struct packet {
         struct packet *next;
@@ -186,15 +189,47 @@ private:
     } *_packets, **_packets_end;
 
     void _packet_handler();
-    void _error_handler();
+    void _pending_data_handler();
     void _disassociation_handler();
     void _hard_fault_handler();
     void _event_handler();
-    void _sock_disconnected();
+    void _sock_closed_handler();
     void _wait_console_active();
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);
+    int _block_async_indications(void);
+    void _set_pending_data(int spwf_id, int amount);
+    void _read_in_pending(void);
+    bool _read_in_packet(int spwf_id, int amount);
+    void _free_packets(int spwf_id);
+
+    bool _recv_delim() {
+        return (_parser.getc() == '\n');
+    }
+
+    bool _recv_ok() {
+        return _parser.recv("OK\r") && _recv_delim();
+    }
+
+    void _block_read_in_pending() {
+        MBED_ASSERT(!_read_in_pending_blocked);
+        _read_in_pending_blocked = true;
+    }
+
+    void _unblock_read_in_pending() {
+        MBED_ASSERT(_read_in_pending_blocked);
+        _read_in_pending_blocked = false;
+    }
+
+    bool _is_read_in_pending_blocked() {
+        return _read_in_pending_blocked;
+    }
+
+    bool _pending_data() {
+        if(_total_pending_data != 0) return true;
+        else return false;
+    }
 
     char _ip_buffer[16];
     char _mac_buffer[18];

@@ -108,6 +108,7 @@ private:
         int spwf_id;
         nsapi_protocol_t proto;
         SocketAddress addr;
+        int pending_data;
     } spwf_socket_t;
 
     SPWFSA01 _spwf;
@@ -116,25 +117,29 @@ private:
     bool _dbg_on;
     bool _connected_to_network;
 
+    spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
     struct {
         void (*callback)(void *);
         void *data;
     } _cbs[SPWFSA_SOCKET_COUNT];
-    spwf_socket_t _ids[SPWFSA_SOCKET_COUNT];
-
-private:
-    friend class SPWFSA01;
+    int _internal_ids[SPWFSA_SOCKET_COUNT];
 
 private:
     void event(void);
     nsapi_error_t init(void);
 
+    int get_internal_id(int spwf_id) {
+        return _internal_ids[spwf_id];
+    }
+
     void inner_constructor() {
         memset(_ids, 0, sizeof(_ids));
         memset(_cbs, 0, sizeof(_cbs));
+        memset(_internal_ids, 0, sizeof(_internal_ids));
 
-        for (int i = 0; i < SPWFSA_SOCKET_COUNT; i++) {
-            _ids[i].internal_id = SPWFSA_SOCKET_COUNT;
+        for (int internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
+            _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
+            _ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
         }
 
         _spwf.attach(this, &SpwfSAInterface::event);
@@ -142,6 +147,9 @@ private:
         _connected_to_network = false;
         _isInitialized = false;
     }
+
+private:
+    friend class SPWFSA01;
 };
 
 #define CHECK_NOT_CONNECTED_ERR() { \
