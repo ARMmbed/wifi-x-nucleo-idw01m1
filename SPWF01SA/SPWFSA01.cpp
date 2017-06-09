@@ -259,7 +259,7 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
-                && (_parser.write((char*)data, (int)to_send) == (int)to_send)
+                && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
             // betzw - TODO: handle different errors more accurately!
             ret = false;
@@ -312,8 +312,8 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
             && (_parser.read(buffer, amount) > 0)
             && _recv_ok())) {
-            return -1;
-        }
+        return -1;
+    }
 
     /* Note: block of async indications has been lifted at this point */
 
@@ -368,8 +368,8 @@ int SPWFSA01::_block_async_indications() {
                 /* try to unblock asynchronous indications */
                 _parser.send("");
                 _recv_ok();
-        return -1;
-    }
+                return -1;
+            }
         }
     }
 
@@ -399,7 +399,7 @@ void SPWFSA01::_packet_handler(void)
         _send_at = false;
         _parser.send("AT");
     }
-        }
+}
 
 void SPWFSA01::_read_in_pending(void) {
     static int internal_id_cnt = 0;
@@ -425,31 +425,31 @@ void SPWFSA01::_read_in_pending(void) {
 /* Note: returns `false` only in case of "out of memory" */
 bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
-            if (!packet) {
+    if (!packet) {
 #ifndef NDEBUG
         error("%s(%d): Out of memory!", __func__, __LINE__);
 #else // NDEBUG
         debug("%s(%d): Out of memory!", __func__, __LINE__);
 #endif
         return false; /* out of memory: give up here! */
-            }
+    }
 
     /* init packet */
     packet->id = spwf_id;
     packet->len = (uint32_t)amount;
-            packet->next = 0;
+    packet->next = 0;
 
     /* read data in */
     if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
-            free(packet);
+        free(packet);
     } else {
         /* append to packet list */
         *_packets_end = packet;
         _packets_end = &packet->next;
-        }
+    }
 
     return true;
-    }
+}
 
 void SPWFSA01::_free_packets(int spwf_id) {
     // check if any packets are ready for `spwf_id`
