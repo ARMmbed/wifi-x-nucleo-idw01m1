@@ -246,7 +246,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     return false;
 }
 
-#define SPWFSA01_MAX_WRITE 4096U // betzw: 64U
+#define SPWFSA01_MAX_WRITE 4096U // betzw - WAS: 4096U // betzw - TRIAL: 64U
 bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
@@ -259,7 +259,7 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
-                && (_parser.write((char*)data, (int)to_send) == (int)to_send)
+                && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
             // betzw - TODO: handle different errors more accurately!
             ret = false;
