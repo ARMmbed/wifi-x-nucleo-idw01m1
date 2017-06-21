@@ -438,6 +438,8 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
 
 int SPWFSA01::_read_in_packet(int spwf_id) {
     int amount;
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
 
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
@@ -500,11 +502,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 
         /* check for pending data on module */
         {
-
-            bool ret;
             int len;
-            BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                         Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
 
             len = _read_in_packet(spwf_id);
             if(len <= 0)  {
@@ -523,9 +521,6 @@ bool SPWFSA01::close(int spwf_id)
 
     // Flush out pending data
     while(true) {
-        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
-
         amount = _read_in_packet(spwf_id);
         if(amount < 0) goto read_in_pending;
         if(amount == 0) break; // no more data to be read
