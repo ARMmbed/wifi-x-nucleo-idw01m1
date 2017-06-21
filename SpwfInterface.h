@@ -108,7 +108,6 @@ private:
         int spwf_id;
         nsapi_protocol_t proto;
         SocketAddress addr;
-        int pending_data;
     } spwf_socket_t;
 
     SPWFSA01 _spwf;

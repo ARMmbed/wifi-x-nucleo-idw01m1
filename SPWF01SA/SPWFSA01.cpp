@@ -26,7 +26,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _timeout(0), _dbg_on(debug),
   _send_at(false), _read_in_pending_blocked(false),
   _call_event_callback_blocked_cnt(0),
-  _total_pending_data(0),
+  _pending_sockets_bitmap(0),
   _associated_interface(ifce),
   _callback_func(),
   _packets(0), _packets_end(&_packets)
@@ -297,9 +297,6 @@ int SPWFSA01::_read_len(int spwf_id) {
     /* unblock `_read_in_pending()` */
     _unblock_read_in_pending();
 
-    /* adjust pending data values */
-    _set_pending_data(spwf_id, amount);
-
     return (int)amount;
 }
 
@@ -314,13 +311,9 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
             && (_parser.read(buffer, amount) > 0)
             && _recv_ok())) {
         /* Note: not sure if block of async indications has been lifted at this point */
-
         return -1;
     } else {
         /* Note: block of async indications has been lifted at this point */
-
-        /* adjust pending data values */
-        _dec_pending_data(spwf_id, amount);
         return amount;
     }
 }
@@ -368,8 +361,11 @@ void SPWFSA01::_packet_handler(void)
         return;
     }
 
-    /* set amount of pending data */
-    _set_pending_data(spwf_id, amount);
+    /* set that ther is pending data for socket */
+    /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
+     *       therefore we just record the socket id without considering the `amount` of data reported!
+     */
+    _set_pending_data(spwf_id);
 
     if(_is_read_in_pending_blocked()) {
         MBED_ASSERT(!_send_at);
@@ -390,26 +386,26 @@ void SPWFSA01::_packet_handler(void)
 }
 
 void SPWFSA01::_read_in_pending(void) {
-    static int internal_id_cnt = 0;
+    static int spwf_id_cnt = 0;
 
     MBED_ASSERT(!_is_read_in_pending_blocked() && !_send_at);
 
-    while(_pending_data()) {
-        if(_associated_interface._ids[internal_id_cnt].pending_data > 0) {
-            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
-            int amount = _read_len(spwf_id);
+    while(_is_data_pending()) {
+        if(_is_data_pending(spwf_id_cnt)) {
+            int amount;
 
-            if(amount <= 0) {
-                /* socket compromised => zero out pending data */
-                _set_pending_data(spwf_id, 0);
-            } else if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
-                return;
+            _clear_pending_data(spwf_id_cnt);
+            amount = _read_len(spwf_id_cnt);
+            if(amount > 0) {
+                if(!_read_in_packet(spwf_id_cnt, (uint32_t)amount)) { /* out of memory */
+                    return;
+                }
             }
         }
 
-        if(_associated_interface._ids[internal_id_cnt].pending_data == 0) {
-            internal_id_cnt++;
-            internal_id_cnt %= SPWFSA_SOCKET_COUNT;
+        if(!_is_data_pending(spwf_id_cnt)) {
+            spwf_id_cnt++;
+            spwf_id_cnt %= SPWFSA_SOCKET_COUNT;
         }
     }
 }
@@ -499,6 +495,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             int len;
             NETSocket_Timeout_Workaround netsock_wa_obj(this);
 
+            _clear_pending_data(spwf_id);
             len = _read_len(spwf_id);
             if(len > 0)  {
                 /* read in pending packet */
@@ -727,35 +724,4 @@ bool SPWFSA01::writeable()
 void SPWFSA01::attach(Callback<void()> func)
 {
     _callback_func = func;
-}
-
-void SPWFSA01::_set_pending_data(int spwf_id, int amount) {
-    int internal_id = _associated_interface.get_internal_id(spwf_id);
-
-    if(amount < _associated_interface._ids[internal_id].pending_data) {
-        debug_if(true, "%s: new=%d, old=%d\r\n", // betzw - TODO: `true` only for debug!
-                 __func__,
-                 amount,
-                 _associated_interface._ids[internal_id].pending_data);
-        return; // asynchronous indications might report not up-to-date data length values
-    }
-
-    _total_pending_data += amount - _associated_interface._ids[internal_id].pending_data;
-    _associated_interface._ids[internal_id].pending_data = amount;
-
-    MBED_ASSERT((_total_pending_data >= 0) &&
-                (_associated_interface._ids[internal_id].pending_data >= 0));
-}
-
-void SPWFSA01::_dec_pending_data(int spwf_id, int amount) {
-    int internal_id = _associated_interface.get_internal_id(spwf_id);
-
-    MBED_ASSERT((_total_pending_data >= amount) &&
-                (_associated_interface._ids[internal_id].pending_data >= 0));
-
-    _total_pending_data -= amount;
-    _associated_interface._ids[internal_id].pending_data -= amount;
-
-    MBED_ASSERT((_total_pending_data >= 0) &&
-                (_associated_interface._ids[internal_id].pending_data >= 0));
 }

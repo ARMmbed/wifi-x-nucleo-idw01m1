@@ -178,7 +178,7 @@ private:
     bool _send_at;
     bool _read_in_pending_blocked;
     int _call_event_callback_blocked_cnt;
-    int _total_pending_data;
+    int _pending_sockets_bitmap;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
 
@@ -200,8 +200,6 @@ private:
     int _read_len(int);
     int _flush_in(char*, int);
     int _block_async_indications(void);
-    void _set_pending_data(int spwf_id, int amount);
-    void _dec_pending_data(int spwf_id, int amount);
     void _read_in_pending(void);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
@@ -228,9 +226,21 @@ private:
         return _read_in_pending_blocked;
     }
 
-    bool _pending_data() {
-        if(_total_pending_data != 0) return true;
+    bool _is_data_pending() {
+        if(_pending_sockets_bitmap != 0) return true;
         else return false;
+    }
+
+    void _set_pending_data(int spwf_id) {
+        _read_in_pending_blocked |= (1 << spwf_id);
+    }
+
+    void _clear_pending_data(int spwf_id) {
+        _read_in_pending_blocked &= ~(1 << spwf_id);
+    }
+
+    bool _is_data_pending(int spwf_id) {
+        return (_read_in_pending_blocked & (1 << spwf_id)) ? true : false;
     }
 
     bool _is_event_callback_blocked() {
