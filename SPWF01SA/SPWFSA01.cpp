@@ -25,6 +25,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _disassoc_handler_recursive_cnt(-1),
   _timeout(0), _dbg_on(debug),
   _send_at(false), _read_in_pending_blocked(false),
+  _call_event_callback_blocked_cnt(0),
   _total_pending_data(0),
   _associated_interface(ifce),
   _callback_func(),
@@ -246,7 +247,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     return false;
 }
 
-#define SPWFSA01_MAX_WRITE 64U // betzw - WAS: 4096U // betzw - TRIAL: 64U
+#define SPWFSA01_MAX_WRITE 4096U // betzw - WAS: 4096U // betzw - TRIAL: 64U
 bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
@@ -303,38 +304,25 @@ int SPWFSA01::_read_len(int spwf_id) {
 }
 
 int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
-    int ret;
-
     MBED_ASSERT(buffer != NULL);
 
     /* block asynchronous indications */
-    ret = _block_async_indications();
-    if(ret != 0) return -1;
+    if(_block_async_indications() != 0) return -1;
 
     /* read in data */
     if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
             && (_parser.read(buffer, amount) > 0)
             && _recv_ok())) {
+        /* Note: not sure if block of async indications has been lifted at this point */
+
         return -1;
+    } else {
+        /* Note: block of async indications has been lifted at this point */
+
+        /* adjust pending data values */
+        _dec_pending_data(spwf_id, amount);
+        return amount;
     }
-
-    /* Note: block of async indications has been lifted at this point */
-
-#if 0 // betzw
-    /* check for further pending data & overcome eventually stale data */
-    ret = _read_len(spwf_id);
-    if(ret > 0) {
-        debug_if(_dbg_on, "%s(%d) Still pending data: %d\r\n",
-                 __func__, __LINE__, ret);
-    } else if(ret < 0) {
-        return -1;
-    }
-#else // 0/1
-    /* adjust pending data values */
-    _dec_pending_data(spwf_id, amount);
-#endif // 0/1
-
-    return amount;
 }
 
 /* Note: in case of error (return -1) blocking has been (tried to be) lifted */
@@ -407,12 +395,16 @@ void SPWFSA01::_read_in_pending(void) {
     MBED_ASSERT(!_is_read_in_pending_blocked() && !_send_at);
 
     while(_pending_data()) {
-        int amount;
-
-        if((amount = _associated_interface._ids[internal_id_cnt].pending_data) > 0) {
+        if(_associated_interface._ids[internal_id_cnt].pending_data > 0) {
             int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
+            int amount = _read_len(spwf_id);
 
-            if(!_read_in_packet(spwf_id, amount)) return; /* out of memory: give up here! */
+            if(amount <= 0) {
+                /* socket compromised => zero out pending data */
+                _set_pending_data(spwf_id, 0);
+            } else if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
+                return;
+            }
         }
 
         if(_associated_interface._ids[internal_id_cnt].pending_data == 0) {
@@ -474,9 +466,6 @@ void SPWFSA01::_free_packets(int spwf_id) {
  */
 int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
-    bool ret;
-    int len;
-
     while (true) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
@@ -504,16 +493,22 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
         }
 
         /* check for pending data on module */
-        len = _read_len(spwf_id);
+        {
 
-        if(len > 0)  {
-            /* read in pending packet */
-            ret = !_read_in_packet(spwf_id, (uint32_t)len);
-            if(ret) { /* out of memory: give up here! */
+            bool ret;
+            int len;
+            NETSocket_Timeout_Workaround netsock_wa_obj(this);
+
+            len = _read_len(spwf_id);
+            if(len > 0)  {
+                /* read in pending packet */
+                ret = !_read_in_packet(spwf_id, (uint32_t)len);
+                if(ret) { /* out of memory */
+                    return -1;
+                }
+            } else {
                 return -1;
             }
-        } else {
-                return -1;
         }
     }
 }
@@ -527,6 +522,7 @@ bool SPWFSA01::close(int spwf_id)
 
     // Flush out pending data
     while(true) {
+        NETSocket_Timeout_Workaround netsock_wa_obj(this);
         if((amount = _read_len(spwf_id)) < 0) goto read_in_pending;
 
         if(amount == 0) break; // no more data to be read
@@ -578,7 +574,7 @@ void SPWFSA01::_event_handler()
 {
     if(_release_rx_sem)
         _rx_sem.release();
-    if((bool)_callback_func)
+    if((bool)_callback_func && !_is_event_callback_blocked())
         _callback_func();
 }
 
@@ -735,6 +731,14 @@ void SPWFSA01::attach(Callback<void()> func)
 
 void SPWFSA01::_set_pending_data(int spwf_id, int amount) {
     int internal_id = _associated_interface.get_internal_id(spwf_id);
+
+    if(amount < _associated_interface._ids[internal_id].pending_data) {
+        debug_if(true, "%s: new=%d, old=%d\r\n", // betzw - TODO: `true` only for debug!
+                 __func__,
+                 amount,
+                 _associated_interface._ids[internal_id].pending_data);
+        return; // asynchronous indications might report not up-to-date data length values
+    }
 
     _total_pending_data += amount - _associated_interface._ids[internal_id].pending_data;
     _associated_interface._ids[internal_id].pending_data = amount;

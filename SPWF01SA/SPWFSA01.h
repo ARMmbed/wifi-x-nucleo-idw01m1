@@ -177,6 +177,7 @@ private:
     bool _dbg_on;
     bool _send_at;
     bool _read_in_pending_blocked;
+    int _call_event_callback_blocked_cnt;
     int _total_pending_data;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
@@ -232,8 +233,40 @@ private:
         else return false;
     }
 
+    bool _is_event_callback_blocked() {
+        return (_call_event_callback_blocked_cnt != 0);
+    }
+
+    void _block_event_callback() {
+        _call_event_callback_blocked_cnt++;
+    }
+
+    void _unblock_event_callback() {
+        MBED_ASSERT(_call_event_callback_blocked_cnt > 0);
+        _call_event_callback_blocked_cnt--;
+    }
+
     char _ip_buffer[16];
     char _mac_buffer[18];
+
+private:
+    friend class NETSocket_Timeout_Workaround;
+};
+
+/* Helper class to work around NETSOCKET's timeout bug */
+class NETSocket_Timeout_Workaround {
+public:
+    NETSocket_Timeout_Workaround(SPWFSA01 *obj) :
+    _obj(*obj) {
+        _obj._block_event_callback();
+    }
+
+    ~NETSocket_Timeout_Workaround() {
+        _obj._unblock_event_callback();
+    }
+
+private:
+    SPWFSA01 &_obj;
 };
 
 #endif  //SPWFSA01_H
