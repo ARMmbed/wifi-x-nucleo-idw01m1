@@ -493,7 +493,8 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 
             bool ret;
             int len;
-            NETSocket_Timeout_Workaround netsock_wa_obj(this);
+            BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                         Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
 
             _clear_pending_data(spwf_id);
             len = _read_len(spwf_id);
@@ -519,11 +520,11 @@ bool SPWFSA01::close(int spwf_id)
 
     // Flush out pending data
     while(true) {
-        NETSocket_Timeout_Workaround netsock_wa_obj(this);
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+
         if((amount = _read_len(spwf_id)) < 0) goto read_in_pending;
-
         if(amount == 0) break; // no more data to be read
-
         if(!_read_in_packet(spwf_id, (uint32_t)amount)) {
             goto read_in_pending; /* out of memory */
         }

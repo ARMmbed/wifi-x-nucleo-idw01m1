@@ -258,25 +258,22 @@ private:
 
     char _ip_buffer[16];
     char _mac_buffer[18];
-
-private:
-    friend class NETSocket_Timeout_Workaround;
 };
 
-/* Helper class to work around NETSOCKET's timeout bug */
-class NETSocket_Timeout_Workaround {
+/* Helper class to execute something whenever entering/leaving a basic block */
+class BlockExecuter {
 public:
-    NETSocket_Timeout_Workaround(SPWFSA01 *obj) :
-    _obj(*obj) {
-        _obj._block_event_callback();
+    BlockExecuter(Callback<void()> exit_cb, Callback<void()> enter_cb = Callback<void()>()) :
+    _exit_cb(exit_cb) {
+        if((bool)enter_cb) enter_cb();
     }
 
-    ~NETSocket_Timeout_Workaround() {
-        _obj._unblock_event_callback();
+    ~BlockExecuter() {
+        _exit_cb();
     }
 
 private:
-    SPWFSA01 &_obj;
+    Callback<void()> _exit_cb;
 };
 
 #endif  //SPWFSA01_H
