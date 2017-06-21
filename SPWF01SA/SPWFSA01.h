@@ -172,13 +172,11 @@ private:
     DigitalOut _reset;
     rtos::Semaphore _rx_sem;
     bool _release_rx_sem;
-    int _disassoc_handler_recursive_cnt;
     int _timeout;
     bool _dbg_on;
-    bool _send_at;
-    bool _read_in_pending_blocked;
-    int _call_event_callback_blocked_cnt;
+    bool _call_event_callback_blocked;
     int _pending_sockets_bitmap;
+    bool _disassociation_flag;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
 
@@ -189,9 +187,11 @@ private:
         // data follows
     } *_packets, **_packets_end;
 
-    void _packet_handler();
+    void _packet_handler_th();
+    void _execute_bottom_halves();
     void _pending_data_handler();
-    void _disassociation_handler();
+    void _disassociation_handler_th();
+    void _disassociation_handler_bh();
     void _hard_fault_handler();
     void _event_handler();
     void _sock_closed_handler();
@@ -213,20 +213,6 @@ private:
         return _parser.recv("OK\r") && _recv_delim();
     }
 
-    void _block_read_in_pending() {
-        MBED_ASSERT(!_read_in_pending_blocked);
-        _read_in_pending_blocked = true;
-    }
-
-    void _unblock_read_in_pending() {
-        MBED_ASSERT(_read_in_pending_blocked);
-        _read_in_pending_blocked = false;
-    }
-
-    bool _is_read_in_pending_blocked() {
-        return _read_in_pending_blocked;
-    }
-
     bool _is_data_pending() {
         if(_pending_sockets_bitmap != 0) return true;
         else return false;
@@ -245,16 +231,22 @@ private:
     }
 
     bool _is_event_callback_blocked() {
-        return (_call_event_callback_blocked_cnt != 0);
+        return _call_event_callback_blocked;
     }
 
     void _block_event_callback() {
-        _call_event_callback_blocked_cnt++;
+        MBED_ASSERT(!_call_event_callback_blocked);
+        _call_event_callback_blocked = true;
     }
 
     void _unblock_event_callback() {
-        MBED_ASSERT(_call_event_callback_blocked_cnt > 0);
-        _call_event_callback_blocked_cnt--;
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
+    }
+
+    void _packet_handler_bh(void) {
+        /* read in other eventually pending packages */
+        _read_in_pending();
     }
 
     char _ip_buffer[16];
@@ -276,5 +268,8 @@ public:
 private:
     Callback<void()> _exit_cb;
 };
+
+#define BH_HANDLER \
+        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSA01::_execute_bottom_halves))
 
 #endif  //SPWFSA01_H

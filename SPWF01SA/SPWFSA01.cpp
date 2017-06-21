@@ -22,11 +22,10 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, 2*1024, 2), _parser(_serial, "\r", "\n"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rx_sem(0), _release_rx_sem(false),
-  _disassoc_handler_recursive_cnt(-1),
   _timeout(0), _dbg_on(debug),
-  _send_at(false), _read_in_pending_blocked(false),
-  _call_event_callback_blocked_cnt(0),
+  _call_event_callback_blocked(false),
   _pending_sockets_bitmap(0),
+  _disassociation_flag(false),
   _associated_interface(ifce),
   _callback_func(),
   _packets(0), _packets_end(&_packets)
@@ -35,8 +34,8 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
     _parser.debugOn(debug);
 
-    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler);
-    _parser.oob("+WIND:41:WiFi Disassociation", this, &SPWFSA01::_disassociation_handler);
+    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
+    _parser.oob("+WIND:41:WiFi Disassociation", this, &SPWFSA01::_disassociation_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
     _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
@@ -231,6 +230,7 @@ bool SPWFSA01::isConnected(void)
 bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
+    BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
@@ -252,9 +252,7 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
     bool ret = true;
-
-    /* block from calling `_read_in_pending()` in packet handler */
-    _block_read_in_pending();
+    BH_HANDLER;
 
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
@@ -270,32 +268,17 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
         sent += to_send;
     }
 
-    /* unblock `_read_in_pending()` */
-    _unblock_read_in_pending();
-
-    /* read in eventually pending data */
-    _read_in_pending();
-
     return ret;
 }
 
 int SPWFSA01::_read_len(int spwf_id) {
     uint32_t amount;
 
-    /* block from calling `_read_in_pending()` in packet handler */
-    _block_read_in_pending();
-
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(" DATALEN: %u\r", &amount)
             && _recv_ok())) {
-        /* unblock `_read_in_pending()` */
-        _unblock_read_in_pending();
-
         return -1;
     }
-
-    /* unblock `_read_in_pending()` */
-    _unblock_read_in_pending();
 
     return (int)amount;
 }
@@ -338,23 +321,21 @@ int SPWFSA01::_block_async_indications() {
         }
     }
 
-    /* block from calling `_read_in_pending()` in packet handler */
-    _block_read_in_pending();
-
     /* Read all pending indications (by receiving anything) */
     while(_serial.readable()) _parser.recv("betzw"); // Note: "betzw" is just a non-empty placeholder
-
-    /* unblock `_read_in_pending()` */
-    _unblock_read_in_pending();
 
     return 0;
 }
 
-void SPWFSA01::_packet_handler(void)
+void SPWFSA01::_execute_bottom_halves() {
+    _packet_handler_bh();
+    _disassociation_handler_bh();
+}
+
+void SPWFSA01::_packet_handler_th(void)
 {
     int spwf_id;
     int amount;
-    bool local_send_at;
 
     /* parse out the socket id & amount */
     if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim())) {
@@ -366,29 +347,10 @@ void SPWFSA01::_packet_handler(void)
      *       therefore we just record the socket id without considering the `amount` of data reported!
      */
     _set_pending_data(spwf_id);
-
-    if(_is_read_in_pending_blocked()) {
-        MBED_ASSERT(!_send_at);
-        return;
-    }
-
-    /* pre-handling of `_send_at` */
-    local_send_at = _send_at;
-    _send_at = false;
-
-    /* read in other eventually pending packages */
-    _read_in_pending();
-
-    /* send 'AT' command to trigger an 'OK' response */
-    if(local_send_at) {
-        _parser.send("AT");
-    }
 }
 
 void SPWFSA01::_read_in_pending(void) {
     static int spwf_id_cnt = 0;
-
-    MBED_ASSERT(!_is_read_in_pending_blocked() && !_send_at);
 
     while(_is_data_pending()) {
         if(_is_data_pending(spwf_id_cnt)) {
@@ -474,6 +436,8 @@ void SPWFSA01::_free_packets(int spwf_id) {
  */
 int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
+    BH_HANDLER;
+
     while (true) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
@@ -516,6 +480,7 @@ bool SPWFSA01::close(int spwf_id)
 {
     int amount;
     bool ret = false;
+    BH_HANDLER;
 
     if(spwf_id == SPWFSA_SOCKET_COUNT) return false;
 
@@ -576,47 +541,83 @@ void SPWFSA01::_event_handler()
  * Handling oob ("+WIND:33:WiFi Network Lost")
  *
  */
-void SPWFSA01::_disassociation_handler()
+void SPWFSA01::_disassociation_handler_th()
 {
     int reason;
-    uint32_t n1, n2, n3, n4;
-    int saved_timeout = _timeout;
-    bool were_connected;
 
 #ifndef NDEBUG
     static unsigned int disassoc_cnt = 0;
     disassoc_cnt++;
 #endif
 
-    were_connected = isConnected();
-    _associated_interface._connected_to_network = false;
-
-    _disassoc_handler_recursive_cnt++;
-    setTimeout(SPWF_DISASSOC_TIMEOUT);
-
     // parse out reason
     if (!(_parser.recv(": %d\r", &reason) && _recv_delim())) {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #1\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler_th() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
     debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
 
+get_out:
+#ifndef NDEBUG
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
+#else // NDEBUG
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+#endif // NDEBUG
+
+    /* set flag to signal _disassociation */
+    _disassociation_flag = true;
+
+    return;
+}
+
+void SPWFSA01::_disassociation_handler_bh()
+{
+    uint32_t n1, n2, n3, n4;
+    int saved_timeout = _timeout;
+    bool were_connected;
+    int at_res = -1;
+
+    if(!_disassociation_flag) return;
+    _disassociation_flag = false;
+
+    were_connected = isConnected();
+    _associated_interface._connected_to_network = false;
+
+    setTimeout(SPWF_DISASSOC_TIMEOUT);
+
+    /* wait for `wifi_state` */
+    while(!(_parser.send("AT+S.STS") &&
+            _parser.recv("#  wifi_state = %d\r", &at_res) &&
+            _recv_ok()) ||
+            (at_res == 4));
+    debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d: wifi_state = %d\r\n", __LINE__, at_res); // betzw - TODO: `true` only for debug!
+
     /* trigger scan */
     if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
     {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #3\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
 
+#if 0 // betzw
+    /* wait for scan complete */
+    do {
+        if(!(_parser.recv("+WIND:35:WiFi Scan Complete (0x%x)", &at_res) && _recv_delim())) {
+            debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+            goto get_out;
+        }
+    } while(at_res != 0);
+#endif
+
     if(!(_parser.send("AT+S.ROAM") && _recv_ok()))
     {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #2\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
 
     setTimeout(SPWF_RECV_TIMEOUT);
 
-    if((_disassoc_handler_recursive_cnt == 0) && (were_connected)) {
+    if(were_connected) {
         _release_rx_sem = true;
         while(true) {
             if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim()) {
@@ -628,7 +629,7 @@ void SPWFSA01::_disassociation_handler()
             } else {
                 int err;
                 if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                    debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err); // betzw - TODO: `true` only for debug!
+                    debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #4 (%d)\r\n", err); // betzw - TODO: `true` only for debug!
 
                     _release_rx_sem = false;
                     goto get_out;
@@ -636,19 +637,14 @@ void SPWFSA01::_disassociation_handler()
             }
         }
     } else {
-        debug_if(true, "Leaving SPWFSA01::_disassociation_handler: %d\r\n", _disassoc_handler_recursive_cnt); // betzw - TODO: `true` only for debug!
+        debug_if(true, "Leaving SPWFSA01::_disassociation_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
 
 get_out:
-#ifndef NDEBUG
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
-#else // NDEBUG
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler\r\n"); // betzw - TODO: `true` only for debug!
-#endif // NDEBUG
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
 
     setTimeout(saved_timeout);
-    _disassoc_handler_recursive_cnt--;
     return;
 }
 
