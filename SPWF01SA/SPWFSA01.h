@@ -233,15 +233,15 @@ private:
     }
 
     void _set_pending_data(int spwf_id) {
-        _read_in_pending_blocked |= (1 << spwf_id);
+        _pending_sockets_bitmap |= (1 << spwf_id);
     }
 
     void _clear_pending_data(int spwf_id) {
-        _read_in_pending_blocked &= ~(1 << spwf_id);
+        _pending_sockets_bitmap &= ~(1 << spwf_id);
     }
 
     bool _is_data_pending(int spwf_id) {
-        return (_read_in_pending_blocked & (1 << spwf_id)) ? true : false;
+        return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
     }
 
     bool _is_event_callback_blocked() {
