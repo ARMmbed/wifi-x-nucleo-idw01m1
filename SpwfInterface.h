@@ -45,7 +45,7 @@
 // Various timeouts for different SPWF operations
 #define SPWF_CONNECT_TIMEOUT    15000
 #define SPWF_SEND_TIMEOUT       500
-#define SPWF_RECV_TIMEOUT       10
+#define SPWF_RECV_TIMEOUT       100
 #define SPWF_MISC_TIMEOUT       500
 #define SPWF_DISASSOC_TIMEOUT   3000
 

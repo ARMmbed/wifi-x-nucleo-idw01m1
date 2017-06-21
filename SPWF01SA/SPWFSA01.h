@@ -201,6 +201,7 @@ private:
     int _flush_in(char*, int);
     int _block_async_indications(void);
     void _read_in_pending(void);
+    int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
 

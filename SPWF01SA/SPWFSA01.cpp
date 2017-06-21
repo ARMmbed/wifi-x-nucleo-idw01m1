@@ -394,12 +394,9 @@ void SPWFSA01::_read_in_pending(void) {
         if(_is_data_pending(spwf_id_cnt)) {
             int amount;
 
-            _clear_pending_data(spwf_id_cnt);
-            amount = _read_len(spwf_id_cnt);
-            if(amount > 0) {
-                if(!_read_in_packet(spwf_id_cnt, (uint32_t)amount)) { /* out of memory */
-                    return;
-                }
+            amount = _read_in_packet(spwf_id_cnt);
+            if(amount < 0) {
+                return; /* out of memory */
             }
         }
 
@@ -437,6 +434,19 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     }
 
     return true;
+}
+
+int SPWFSA01::_read_in_packet(int spwf_id) {
+    int amount;
+
+    _clear_pending_data(spwf_id);
+    amount = _read_len(spwf_id);
+    if(amount > 0) {
+        if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
+            return -1;
+        }
+    }
+    return amount;
 }
 
 void SPWFSA01::_free_packets(int spwf_id) {
@@ -496,15 +506,8 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
                                          Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
 
-            _clear_pending_data(spwf_id);
-            len = _read_len(spwf_id);
-            if(len > 0)  {
-                /* read in pending packet */
-                ret = !_read_in_packet(spwf_id, (uint32_t)len);
-                if(ret) { /* out of memory */
-                    return -1;
-                }
-            } else {
+            len = _read_in_packet(spwf_id);
+            if(len <= 0)  {
                 return -1;
             }
         }
@@ -523,11 +526,9 @@ bool SPWFSA01::close(int spwf_id)
         BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
                                      Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
 
-        if((amount = _read_len(spwf_id)) < 0) goto read_in_pending;
+        amount = _read_in_packet(spwf_id);
+        if(amount < 0) goto read_in_pending;
         if(amount == 0) break; // no more data to be read
-        if(!_read_in_packet(spwf_id, (uint32_t)amount)) {
-            goto read_in_pending; /* out of memory */
-        }
     }
 
     // Close socket
