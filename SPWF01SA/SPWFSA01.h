@@ -170,8 +170,6 @@ private:
     ATParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
-    rtos::Semaphore _rx_sem;
-    bool _release_rx_sem;
     int _timeout;
     bool _dbg_on;
     bool _call_event_callback_blocked;
@@ -204,13 +202,18 @@ private:
     int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
+    bool _restart_radio();
 
-    bool _recv_delim() {
+    bool _recv_delim_lf() {
+        return (_parser.getc() == '\n');
+    }
+
+    bool _recv_delim_cr() {
         return (_parser.getc() == '\n');
     }
 
     bool _recv_ok() {
-        return _parser.recv("OK\r") && _recv_delim();
+        return _parser.recv("OK\r") && _recv_delim_lf();
     }
 
     bool _is_data_pending() {

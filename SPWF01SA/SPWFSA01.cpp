@@ -21,7 +21,6 @@
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, 2*1024, 2), _parser(_serial, "\r", "\n"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
-  _rx_sem(0), _release_rx_sem(false),
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
   _pending_sockets_bitmap(0),
@@ -96,7 +95,7 @@ bool SPWFSA01::startup(int mode)
 
 void SPWFSA01::_wait_console_active(void) {
     while(true) {
-        if (_parser.recv("+WIND:0:Console active\r") && _recv_delim()) {
+        if (_parser.recv("+WIND:0:Console active\r") && _recv_delim_lf()) {
             return;
         }
     }
@@ -135,20 +134,23 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
         debug_if(_dbg_on, "SPWF> error pass set\r\n");
         return false;
     } 
+
     //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error ssid set\r\n");
         return false;
     }
+
     //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error security mode set\r\n");
         return false;
-    } 
+    }
+
     //"AT+S.SCFG=wifi_mode,%d"
-    /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    /*set wifi mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
@@ -156,10 +158,19 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     }
 
     while(true)
-        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4) && _recv_delim())
+        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             break;
         }
+
+#ifndef NDEBUG
+    /* trigger scan */
+    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
+        return false;
+    }
+#endif
 
     return true;
 }
@@ -257,6 +268,7 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
+        if(_disassociation_flag) break;
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                 && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
@@ -338,7 +350,7 @@ void SPWFSA01::_packet_handler_th(void)
     int amount;
 
     /* parse out the socket id & amount */
-    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim())) {
+    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim_lf())) {
         return;
     }
 
@@ -352,7 +364,7 @@ void SPWFSA01::_packet_handler_th(void)
 void SPWFSA01::_read_in_pending(void) {
     static int spwf_id_cnt = 0;
 
-    while(_is_data_pending()) {
+    while(_is_data_pending() && !_disassociation_flag) {
         if(_is_data_pending(spwf_id_cnt)) {
             int amount;
 
@@ -438,7 +450,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
     BH_HANDLER;
 
-    while (true) {
+    while (!_disassociation_flag) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
@@ -474,6 +486,8 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             }
         }
     }
+
+    return -1;
 }
 
 bool SPWFSA01::close(int spwf_id)
@@ -531,14 +545,12 @@ void SPWFSA01::_pending_data_handler()
  */
 void SPWFSA01::_event_handler()
 {
-    if(_release_rx_sem)
-        _rx_sem.release();
     if((bool)_callback_func && !_is_event_callback_blocked())
         _callback_func();
 }
 
 /*
- * Handling oob ("+WIND:33:WiFi Network Lost")
+ * Handling oob ("+WIND:41:WiFi Disassociation")
  *
  */
 void SPWFSA01::_disassociation_handler_th()
@@ -551,7 +563,7 @@ void SPWFSA01::_disassociation_handler_th()
 #endif
 
     // parse out reason
-    if (!(_parser.recv(": %d\r", &reason) && _recv_delim())) {
+    if (!(_parser.recv(": %d\r", &reason) && _recv_delim_lf())) {
         debug_if(true, "\r\n SPWFSA01::_disassociation_handler_th() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
@@ -561,7 +573,7 @@ get_out:
 #ifndef NDEBUG
     debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
 #else // NDEBUG
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th: %d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
 #endif // NDEBUG
 
     /* set flag to signal _disassociation */
@@ -572,68 +584,40 @@ get_out:
 
 void SPWFSA01::_disassociation_handler_bh()
 {
-    uint32_t n1, n2, n3, n4;
-    int saved_timeout = _timeout;
     bool were_connected;
-    int at_res = -1;
+    int saved_timeout = _timeout;
+    Timer timer;
+    timer.start();
+
+    setTimeout(SPWF_DISASSOC_TIMEOUT);
 
     if(!_disassociation_flag) return;
-    _disassociation_flag = false;
 
     were_connected = isConnected();
     _associated_interface._connected_to_network = false;
 
-    setTimeout(SPWF_DISASSOC_TIMEOUT);
-
-    /* wait for `wifi_state` */
-    while(!(_parser.send("AT+S.STS") &&
-            _parser.recv("#  wifi_state = %d\r", &at_res) &&
-            _recv_ok()) ||
-            (at_res == 4));
-    debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d: wifi_state = %d\r\n", __LINE__, at_res); // betzw - TODO: `true` only for debug!
-
-    /* trigger scan */
-    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
-    {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
-        goto get_out;
-    }
-
-#if 0 // betzw
-    /* wait for scan complete */
-    do {
-        if(!(_parser.recv("+WIND:35:WiFi Scan Complete (0x%x)", &at_res) && _recv_delim())) {
-            debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
-            goto get_out;
-        }
-    } while(at_res != 0);
-#endif
-
-    if(!(_parser.send("AT+S.ROAM") && _recv_ok()))
-    {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
-        goto get_out;
-    }
-
-    setTimeout(SPWF_RECV_TIMEOUT);
-
     if(were_connected) {
-        _release_rx_sem = true;
+        uint32_t n1, n2, n3, n4;
+
         while(true) {
-            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim()) {
+            if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
+                debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                goto get_out;
+            }
+
+            /* trigger scan */
+            if(!_restart_radio())
+            {
+                debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                continue;
+            }
+
+
+            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                 debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
 
                 _associated_interface._connected_to_network = true;
-                _release_rx_sem = false;
                 goto get_out;
-            } else {
-                int err;
-                if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                    debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #4 (%d)\r\n", err); // betzw - TODO: `true` only for debug!
-
-                    _release_rx_sem = false;
-                    goto get_out;
-                }
             }
         }
     } else {
@@ -645,7 +629,25 @@ get_out:
     debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
 
     setTimeout(saved_timeout);
+   _disassociation_flag = false;
+
     return;
+}
+
+bool SPWFSA01::_restart_radio()
+{
+    /* disable Wi-Fi radio device */
+    _parser.send("AT+S.WIFI=0");
+
+    if(!(_parser.recv("+WIND:38:WiFi:Powered Down\r") && _recv_delim_lf())) {
+        debug_if(true, "SPWF> Wi-Fi power down failed\r\n"); // betzw - TODO: `true` only for debug!
+        return false;
+    }
+
+    /* enable Wi-Fi radio device */
+    _parser.send("AT+S.WIFI=1");
+
+    return true;
 }
 
 /*
@@ -687,7 +689,7 @@ void SPWFSA01::_sock_closed_handler()
 {
     int spwf_id, internal_id;
 
-    if(!(_parser.recv(":%d\r",&spwf_id) && _recv_delim())) {
+    if(!(_parser.recv(":%d\r",&spwf_id) && _recv_delim_lf())) {
         return;
     }
 
