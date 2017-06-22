@@ -24,7 +24,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
   _pending_sockets_bitmap(0),
-  _disassociation_flag(false),
+  _network_lost_flag(false),
   _associated_interface(ifce),
   _callback_func(),
   _packets(0), _packets_end(&_packets)
@@ -34,7 +34,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
-    _parser.oob("+WIND:41:WiFi Disassociation", this, &SPWFSA01::_disassociation_handler_th);
+    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
     _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
@@ -268,7 +268,7 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
-        if(_disassociation_flag) break;
+        if(_network_lost_flag) break;
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                 && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
@@ -341,7 +341,7 @@ int SPWFSA01::_block_async_indications() {
 
 void SPWFSA01::_execute_bottom_halves() {
     _packet_handler_bh();
-    _disassociation_handler_bh();
+    _network_lost_handler_bh();
 }
 
 void SPWFSA01::_packet_handler_th(void)
@@ -364,7 +364,7 @@ void SPWFSA01::_packet_handler_th(void)
 void SPWFSA01::_read_in_pending(void) {
     static int spwf_id_cnt = 0;
 
-    while(_is_data_pending() && !_disassociation_flag) {
+    while(_is_data_pending() && !_network_lost_flag) {
         if(_is_data_pending(spwf_id_cnt)) {
             int amount;
 
@@ -450,7 +450,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
     BH_HANDLER;
 
-    while (!_disassociation_flag) {
+    while (!_network_lost_flag) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
@@ -550,48 +550,40 @@ void SPWFSA01::_event_handler()
 }
 
 /*
- * Handling oob ("+WIND:41:WiFi Disassociation")
+ * Handling oob ("+WIND:33:WiFi Network Lost")
  *
  */
-void SPWFSA01::_disassociation_handler_th()
+void SPWFSA01::_network_lost_handler_th()
 {
-    int reason;
-
 #ifndef NDEBUG
-    static unsigned int disassoc_cnt = 0;
-    disassoc_cnt++;
+    static unsigned int net_loss_cnt = 0;
+    net_loss_cnt++;
 #endif
 
-    // parse out reason
-    if (!(_parser.recv(": %d\r", &reason) && _recv_delim_lf())) {
-        debug_if(true, "\r\n SPWFSA01::_disassociation_handler_th() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
-        goto get_out;
-    }
-    debug_if(true, "Disassociation: %d\r\n", reason); // betzw - TODO: `true` only for debug!
-
-get_out:
 #ifndef NDEBUG
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th: %d\r\n", disassoc_cnt); // betzw - TODO: `true` only for debug!
+    debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", net_loss_cnt); // betzw - TODO: `true` only for debug!
 #else // NDEBUG
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_th: %d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+    debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
 #endif // NDEBUG
 
-    /* set flag to signal _disassociation */
-    _disassociation_flag = true;
+    /* set flag to signal network loss */
+    _network_lost_flag = true;
 
     return;
 }
 
-void SPWFSA01::_disassociation_handler_bh()
+void SPWFSA01::_network_lost_handler_bh()
 {
     bool were_connected;
     int saved_timeout = _timeout;
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
     Timer timer;
     timer.start();
 
-    setTimeout(SPWF_DISASSOC_TIMEOUT);
+    setTimeout(SPWF_NETLOST_TIMEOUT);
 
-    if(!_disassociation_flag) return;
+    if(!_network_lost_flag) return;
 
     were_connected = isConnected();
     _associated_interface._connected_to_network = false;
@@ -601,14 +593,14 @@ void SPWFSA01::_disassociation_handler_bh()
 
         while(true) {
             if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
                 goto get_out;
             }
 
             /* trigger scan */
             if(!_restart_radio())
             {
-                debug_if(true, "\r\n SPWFSA01::_disassociation_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
                 continue;
             }
 
@@ -621,15 +613,15 @@ void SPWFSA01::_disassociation_handler_bh()
             }
         }
     } else {
-        debug_if(true, "Leaving SPWFSA01::_disassociation_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
+        debug_if(true, "Leaving SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
         goto get_out;
     }
 
 get_out:
-    debug_if(true, "Getting out of SPWFSA01::_disassociation_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
+    debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
 
     setTimeout(saved_timeout);
-   _disassociation_flag = false;
+   _network_lost_flag = false;
 
     return;
 }

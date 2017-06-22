@@ -174,7 +174,7 @@ private:
     bool _dbg_on;
     bool _call_event_callback_blocked;
     int _pending_sockets_bitmap;
-    bool _disassociation_flag;
+    bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
 
@@ -188,8 +188,8 @@ private:
     void _packet_handler_th();
     void _execute_bottom_halves();
     void _pending_data_handler();
-    void _disassociation_handler_th();
-    void _disassociation_handler_bh();
+    void _network_lost_handler_th();
+    void _network_lost_handler_bh();
     void _hard_fault_handler();
     void _event_handler();
     void _sock_closed_handler();

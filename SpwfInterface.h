@@ -47,7 +47,7 @@
 #define SPWF_SEND_TIMEOUT       500
 #define SPWF_RECV_TIMEOUT       100
 #define SPWF_MISC_TIMEOUT       500
-#define SPWF_DISASSOC_TIMEOUT   30000
+#define SPWF_NETLOST_TIMEOUT    30000
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
