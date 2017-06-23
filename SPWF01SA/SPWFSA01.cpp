@@ -21,11 +21,10 @@
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, 2*1024, 2), _parser(_serial, "\r", "\n"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
-  _rx_sem(0), _release_rx_sem(false),
-  _disassoc_handler_recursive_cnt(-1),
   _timeout(0), _dbg_on(debug),
-  _send_at(false), _read_in_pending_blocked(false),
-  _total_pending_data(0),
+  _call_event_callback_blocked(false),
+  _pending_sockets_bitmap(0),
+  _network_lost_flag(false),
   _associated_interface(ifce),
   _callback_func(),
   _packets(0), _packets_end(&_packets)
@@ -34,8 +33,8 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
     _parser.debugOn(debug);
 
-    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler);
-    _parser.oob("+WIND:41:WiFi Disassociation", this, &SPWFSA01::_disassociation_handler);
+    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
+    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
     _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
@@ -96,7 +95,7 @@ bool SPWFSA01::startup(int mode)
 
 void SPWFSA01::_wait_console_active(void) {
     while(true) {
-        if (_parser.recv("+WIND:0:Console active\r") && _recv_delim()) {
+        if (_parser.recv("+WIND:0:Console active\r") && _recv_delim_lf()) {
             return;
         }
     }
@@ -135,20 +134,23 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
         debug_if(_dbg_on, "SPWF> error pass set\r\n");
         return false;
     } 
+
     //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error ssid set\r\n");
         return false;
     }
+
     //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error security mode set\r\n");
         return false;
-    } 
+    }
+
     //"AT+S.SCFG=wifi_mode,%d"
-    /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    /*set wifi mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
@@ -156,10 +158,19 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     }
 
     while(true)
-        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4) && _recv_delim())
+        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             break;
         }
+
+#ifndef NDEBUG
+    /* trigger scan */
+    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
+        return false;
+    }
+#endif
 
     return true;
 }
@@ -230,6 +241,7 @@ bool SPWFSA01::isConnected(void)
 bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
+    BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
@@ -237,7 +249,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
         return false;
     }
 
-    if( _parser.recv(" ID: %d\r", &socket_id)
+    if(_parser.recv(" ID: %d\r", &socket_id)
             && _recv_ok()) {
         *spwf_id = socket_id;
         return true;
@@ -251,13 +263,12 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
     bool ret = true;
-
-    /* block from calling `read_in()` recursively */
-    _block_read_in_pending();
+    BH_HANDLER;
 
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
+        if(_network_lost_flag) break;
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                 && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
@@ -269,20 +280,11 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
         sent += to_send;
     }
 
-    /* unblock `read_in()` */
-    _unblock_read_in_pending();
-
-    /* read in eventually pending data */
-    _read_in_pending();
-
     return ret;
 }
 
 int SPWFSA01::_read_len(int spwf_id) {
     uint32_t amount;
-
-    /* block from calling `read_in()` recursively */
-    _block_read_in_pending();
 
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(" DATALEN: %u\r", &amount)
@@ -290,53 +292,31 @@ int SPWFSA01::_read_len(int spwf_id) {
         return -1;
     }
 
-    /* unblock `read_in()` */
-    _unblock_read_in_pending();
-
-    /* adjust pending data values */
-    _set_pending_data(spwf_id, amount);
-
     return (int)amount;
 }
 
 int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
-    int ret;
-
     MBED_ASSERT(buffer != NULL);
 
     /* block asynchronous indications */
-    ret = _block_async_indications();
-    if(ret != 0) return -1;
+    if(_block_async_indications() != 0) return -1;
 
     /* read in data */
     if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
             && (_parser.read(buffer, amount) > 0)
             && _recv_ok())) {
+        /* Note: not sure if block of async indications has been lifted at this point */
         return -1;
+    } else {
+        /* Note: block of async indications has been lifted at this point */
+        return amount;
     }
-
-    /* Note: block of async indications has been lifted at this point */
-
-    /* check for further pending data & overcome eventually stale data */
-    ret = _read_len(spwf_id);
-    if(ret > 0) {
-        debug_if(_dbg_on, "%s(%d) Still pending data: %d\r\n",
-                 __func__, __LINE__, ret);
-    } else if(ret < 0) {
-        return -1;
-    }
-
-    return amount;
 }
 
 /* Note: in case of error (return -1) blocking has been (tried to be) lifted */
 int SPWFSA01::_block_async_indications() {
-    int iret;
-    bool bret;
-
     /* Send 'AT' without delimiter */
-    iret = _parser.printf("AT");
-    if(iret <= 0) return -1;
+    if(_parser.printf("AT") <= 0) return -1;
 
     /* Wait for command being sent */
     {
@@ -353,71 +333,50 @@ int SPWFSA01::_block_async_indications() {
         }
     }
 
-    /* Read all pending indications (treating pending data in a special way) */
-    while(_serial.readable()) {
-        bret = _parser.recv("+WIND:55:");
-        if(bret) {
-            int spwf_id;
-            int amount;
-
-            bret = _parser.recv("Pending Data:%d:%d\r", &spwf_id, &amount);
-            if(bret && (_parser.getc() == '\n')) {
-                /* set amount of pending data */
-                _set_pending_data(spwf_id, amount);
-            } else {
-                /* try to unblock asynchronous indications */
-                _parser.send("");
-                _recv_ok();
-                return -1;
-            }
-        }
-    }
+    /* Read all pending indications (by receiving anything) */
+    while(_serial.readable()) _parser.recv("betzw"); // Note: "betzw" is just a non-empty placeholder
 
     return 0;
 }
 
-void SPWFSA01::_packet_handler(void)
+void SPWFSA01::_execute_bottom_halves() {
+    _packet_handler_bh();
+    _network_lost_handler_bh();
+}
+
+void SPWFSA01::_packet_handler_th(void)
 {
     int spwf_id;
     int amount;
 
     /* parse out the socket id & amount */
-    if (!_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim()) {
+    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim_lf())) {
         return;
     }
 
-    /* set amount of pending data */
-    _set_pending_data(spwf_id, amount);
-
-    if(_is_read_in_pending_blocked()) return;
-
-    /* read in other eventually pending packages */
-    _read_in_pending();
-
-    /* send 'AT' command to trigger an 'OK' response */
-    if(_send_at) {
-        _send_at = false;
-        _parser.send("AT");
-    }
+    /* set that ther is pending data for socket */
+    /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
+     *       therefore we just record the socket id without considering the `amount` of data reported!
+     */
+    _set_pending_data(spwf_id);
 }
 
 void SPWFSA01::_read_in_pending(void) {
-    static int internal_id_cnt = 0;
+    static int spwf_id_cnt = 0;
 
-    MBED_ASSERT(!_is_read_in_pending_blocked());
+    while(_is_data_pending() && !_network_lost_flag) {
+        if(_is_data_pending(spwf_id_cnt)) {
+            int amount;
 
-    while(_pending_data()) {
-        int amount;
-
-        if((amount = _associated_interface._ids[internal_id_cnt].pending_data) > 0) {
-            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
-
-            if(!_read_in_packet(spwf_id, amount)) return; /* out of memory: give up here! */
+            amount = _read_in_packet(spwf_id_cnt);
+            if(amount < 0) {
+                return; /* out of memory */
+            }
         }
 
-        if(_associated_interface._ids[internal_id_cnt].pending_data == 0) {
-            internal_id_cnt++;
-            internal_id_cnt %= SPWFSA_SOCKET_COUNT;
+        if(!_is_data_pending(spwf_id_cnt)) {
+            spwf_id_cnt++;
+            spwf_id_cnt %= SPWFSA_SOCKET_COUNT;
         }
     }
 }
@@ -451,6 +410,21 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     return true;
 }
 
+int SPWFSA01::_read_in_packet(int spwf_id) {
+    int amount;
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+
+    _clear_pending_data(spwf_id);
+    amount = _read_len(spwf_id);
+    if(amount > 0) {
+        if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
+            return -1;
+        }
+    }
+    return amount;
+}
+
 void SPWFSA01::_free_packets(int spwf_id) {
     // check if any packets are ready for `spwf_id`
     for(struct packet **p = &_packets; *p;) {
@@ -474,9 +448,9 @@ void SPWFSA01::_free_packets(int spwf_id) {
  */
 int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
-    bool ret;
+    BH_HANDLER;
 
-    while (true) {
+    while (!_network_lost_flag) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
@@ -502,34 +476,33 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             }
         }
 
-        /* wait for incoming packet */
-        _send_at = true;
-        ret = !_recv_ok();
-        _send_at = false;
+        /* check for pending data on module */
+        {
+            int len;
 
-        /* handle return value */
-        if (ret) {
-            return -1;
+            len = _read_in_packet(spwf_id);
+            if(len <= 0)  {
+                return -1;
+            }
         }
     }
+
+    return -1;
 }
 
 bool SPWFSA01::close(int spwf_id)
 {
     int amount;
     bool ret = false;
+    BH_HANDLER;
 
     if(spwf_id == SPWFSA_SOCKET_COUNT) return false;
 
     // Flush out pending data
     while(true) {
-        if((amount = _read_len(spwf_id)) < 0) goto read_in_pending;
-
+        amount = _read_in_packet(spwf_id);
+        if(amount < 0) goto read_in_pending;
         if(amount == 0) break; // no more data to be read
-
-        if(!_read_in_packet(spwf_id, (uint32_t)amount)) {
-            goto read_in_pending; /* out of memory */
-        }
     }
 
     // Close socket
@@ -572,9 +545,7 @@ void SPWFSA01::_pending_data_handler()
  */
 void SPWFSA01::_event_handler()
 {
-    if(_release_rx_sem)
-        _rx_sem.release();
-    if((bool)_callback_func)
+    if((bool)_callback_func && !_is_event_callback_blocked())
         _callback_func();
 }
 
@@ -582,80 +553,93 @@ void SPWFSA01::_event_handler()
  * Handling oob ("+WIND:33:WiFi Network Lost")
  *
  */
-void SPWFSA01::_disassociation_handler()
+void SPWFSA01::_network_lost_handler_th()
 {
-    int reason;
-    uint32_t n1, n2, n3, n4;
-    int saved_timeout = _timeout;
-    bool were_connected;
+#ifndef NDEBUG
+    static unsigned int net_loss_cnt = 0;
+    net_loss_cnt++;
+#endif
 
 #ifndef NDEBUG
-    static unsigned int disassoc_cnt = 0;
-    disassoc_cnt++;
-#endif
+    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", net_loss_cnt);
+#else // NDEBUG
+    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", __LINE__);
+#endif // NDEBUG
+
+    /* set flag to signal network loss */
+    _network_lost_flag = true;
+
+    return;
+}
+
+void SPWFSA01::_network_lost_handler_bh()
+{
+    bool were_connected;
+    int saved_timeout = _timeout;
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+    Timer timer;
+    timer.start();
+
+    setTimeout(SPWF_NETLOST_TIMEOUT);
+
+    if(!_network_lost_flag) return;
 
     were_connected = isConnected();
     _associated_interface._connected_to_network = false;
 
-    _disassoc_handler_recursive_cnt++;
-    setTimeout(SPWF_DISASSOC_TIMEOUT);
+    if(were_connected) {
+        uint32_t n1, n2, n3, n4;
 
-    // parse out reason
-    if (!_parser.recv(": %d\r", &reason) && _recv_delim()) {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #1\r\n");
-        goto get_out;
-    }
-    debug_if(_dbg_on, "Disassociation: %d\r\n", reason);
-
-    /* trigger scan */
-    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #3\r\n");
-        goto get_out;
-    }
-
-    if(!(_parser.send("AT+S.ROAM") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #2\r\n");
-        goto get_out;
-    }
-
-    setTimeout(SPWF_RECV_TIMEOUT);
-
-    if((_disassoc_handler_recursive_cnt == 0) && (were_connected)) {
-        _release_rx_sem = true;
         while(true) {
-            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim()) {
+            if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
+                debug_if(_dbg_on, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__);
+                goto get_out;
+            }
+
+            /* trigger scan */
+            if(!_restart_radio())
+            {
+                debug_if(_dbg_on, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__);
+                continue;
+            }
+
+
+            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                 debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                 _associated_interface._connected_to_network = true;
-                _release_rx_sem = false;
                 goto get_out;
-            } else {
-                int err;
-                if((err = _rx_sem.wait(SPWF_CONNECT_TIMEOUT)) <= 0) { // wait for IRQ
-                    debug_if(_dbg_on, "\r\n SPWFSA01::_disassociation_handler() #4 (%d)\r\n", err);
-
-                    _release_rx_sem = false;
-                    goto get_out;
-                }
             }
         }
     } else {
-        debug_if(_dbg_on, "Leaving SPWFSA01::_disassociation_handler: %d\r\n", _disassoc_handler_recursive_cnt);
+        debug_if(_dbg_on, "Leaving SPWFSA01::_network_lost_handler_bh\r\n");
         goto get_out;
     }
 
 get_out:
-#ifndef NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSA01::_disassociation_handler: %d\r\n", disassoc_cnt);
-#else // NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSA01::_disassociation_handler\r\n");
-#endif // NDEBUG
+    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n");
 
     setTimeout(saved_timeout);
-    _disassoc_handler_recursive_cnt--;
+   _network_lost_flag = false;
+
     return;
+}
+
+bool SPWFSA01::_restart_radio()
+{
+    /* disable Wi-Fi radio device */
+    _parser.send("AT+S.WIFI=0");
+
+    if(!(_parser.recv("+WIND:38:WiFi:Powered Down\r") && _recv_delim_lf())) {
+        debug_if(_dbg_on, "SPWF> Wi-Fi power down failed\r\n");
+        return false;
+    }
+
+    /* enable Wi-Fi radio device */
+    _parser.send("AT+S.WIFI=1");
+
+    return true;
 }
 
 /*
@@ -697,7 +681,7 @@ void SPWFSA01::_sock_closed_handler()
 {
     int spwf_id, internal_id;
 
-    if(!(_parser.recv(":%d\r",&spwf_id)) && _recv_delim()) {
+    if(!(_parser.recv(":%d\r",&spwf_id) && _recv_delim_lf())) {
         return;
     }
 
@@ -727,14 +711,4 @@ bool SPWFSA01::writeable()
 void SPWFSA01::attach(Callback<void()> func)
 {
     _callback_func = func;
-}
-
-void SPWFSA01::_set_pending_data(int spwf_id, int amount) {
-    int internal_id = _associated_interface.get_internal_id(spwf_id);
-
-    _total_pending_data += amount - _associated_interface._ids[internal_id].pending_data;
-    _associated_interface._ids[internal_id].pending_data = amount;
-
-    MBED_ASSERT((_total_pending_data >= 0) &&
-                (_associated_interface._ids[internal_id].pending_data >= 0));
 }

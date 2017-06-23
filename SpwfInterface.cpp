@@ -307,6 +307,10 @@ nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned si
 
     _spwf.setTimeout(SPWF_RECV_TIMEOUT);
 
+    if(socket->spwf_id == SPWFSA_SOCKET_COUNT) {
+        return NSAPI_ERROR_NO_ADDRESS;
+    }
+
     int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size);
     if (recv < 0) {
         return NSAPI_ERROR_WOULD_BLOCK;

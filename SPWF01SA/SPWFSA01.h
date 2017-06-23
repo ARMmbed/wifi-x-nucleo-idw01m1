@@ -170,14 +170,11 @@ private:
     ATParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
-    rtos::Semaphore _rx_sem;
-    bool _release_rx_sem;
-    int _disassoc_handler_recursive_cnt;
     int _timeout;
     bool _dbg_on;
-    bool _send_at;
-    bool _read_in_pending_blocked;
-    int _total_pending_data;
+    bool _call_event_callback_blocked;
+    int _pending_sockets_bitmap;
+    bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
     Callback<void()> _callback_func;
 
@@ -188,9 +185,11 @@ private:
         // data follows
     } *_packets, **_packets_end;
 
-    void _packet_handler();
+    void _packet_handler_th();
+    void _execute_bottom_halves();
     void _pending_data_handler();
-    void _disassociation_handler();
+    void _network_lost_handler_th();
+    void _network_lost_handler_bh();
     void _hard_fault_handler();
     void _event_handler();
     void _sock_closed_handler();
@@ -199,40 +198,81 @@ private:
     int _read_len(int);
     int _flush_in(char*, int);
     int _block_async_indications(void);
-    void _set_pending_data(int spwf_id, int amount);
     void _read_in_pending(void);
+    int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
+    bool _restart_radio();
 
-    bool _recv_delim() {
+    bool _recv_delim_lf() {
+        return (_parser.getc() == '\n');
+    }
+
+    bool _recv_delim_cr() {
         return (_parser.getc() == '\n');
     }
 
     bool _recv_ok() {
-        return _parser.recv("OK\r") && _recv_delim();
+        return _parser.recv("OK\r") && _recv_delim_lf();
     }
 
-    void _block_read_in_pending() {
-        MBED_ASSERT(!_read_in_pending_blocked);
-        _read_in_pending_blocked = true;
-    }
-
-    void _unblock_read_in_pending() {
-        MBED_ASSERT(_read_in_pending_blocked);
-        _read_in_pending_blocked = false;
-    }
-
-    bool _is_read_in_pending_blocked() {
-        return _read_in_pending_blocked;
-    }
-
-    bool _pending_data() {
-        if(_total_pending_data != 0) return true;
+    bool _is_data_pending() {
+        if(_pending_sockets_bitmap != 0) return true;
         else return false;
+    }
+
+    void _set_pending_data(int spwf_id) {
+        _pending_sockets_bitmap |= (1 << spwf_id);
+    }
+
+    void _clear_pending_data(int spwf_id) {
+        _pending_sockets_bitmap &= ~(1 << spwf_id);
+    }
+
+    bool _is_data_pending(int spwf_id) {
+        return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
+    }
+
+    bool _is_event_callback_blocked() {
+        return _call_event_callback_blocked;
+    }
+
+    void _block_event_callback() {
+        MBED_ASSERT(!_call_event_callback_blocked);
+        _call_event_callback_blocked = true;
+    }
+
+    void _unblock_event_callback() {
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
+    }
+
+    void _packet_handler_bh(void) {
+        /* read in other eventually pending packages */
+        _read_in_pending();
     }
 
     char _ip_buffer[16];
     char _mac_buffer[18];
 };
+
+/* Helper class to execute something whenever entering/leaving a basic block */
+class BlockExecuter {
+public:
+    BlockExecuter(Callback<void()> exit_cb, Callback<void()> enter_cb = Callback<void()>()) :
+    _exit_cb(exit_cb) {
+        if((bool)enter_cb) enter_cb();
+    }
+
+    ~BlockExecuter() {
+        _exit_cb();
+    }
+
+private:
+    Callback<void()> _exit_cb;
+};
+
+#define BH_HANDLER \
+        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSA01::_execute_bottom_halves))
 
 #endif  //SPWFSA01_H
