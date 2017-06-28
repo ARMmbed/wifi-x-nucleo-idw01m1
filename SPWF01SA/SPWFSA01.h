@@ -202,6 +202,7 @@ private:
     int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
+    void _free_all_packets();
     bool _restart_radio();
 
     bool _recv_delim_lf() {

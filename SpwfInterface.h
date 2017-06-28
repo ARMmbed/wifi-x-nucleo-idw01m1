@@ -144,7 +144,6 @@ private:
         _spwf.attach(this, &SpwfSAInterface::event);
 
         _connected_to_network = false;
-        _isInitialized = false;
     }
 
 private:
