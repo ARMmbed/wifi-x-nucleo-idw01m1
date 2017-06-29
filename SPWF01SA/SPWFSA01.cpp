@@ -299,7 +299,6 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
-        if(_network_lost_flag) break;
         if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                 && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                 && _recv_ok())) {
@@ -397,7 +396,7 @@ void SPWFSA01::_packet_handler_th(void)
 void SPWFSA01::_read_in_pending(void) {
     static int spwf_id_cnt = 0;
 
-    while(_is_data_pending() && !_network_lost_flag) {
+    while(_is_data_pending()) {
         if(_is_data_pending(spwf_id_cnt)) {
             int amount;
 
@@ -489,7 +488,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
     BH_HANDLER;
 
-    while (!_network_lost_flag) {
+    while (true) {
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
