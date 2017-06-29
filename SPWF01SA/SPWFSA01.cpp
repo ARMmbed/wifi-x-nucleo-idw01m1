@@ -134,7 +134,8 @@ bool SPWFSA01::reset(void)
     if(!_parser.send("AT+CFUN=1")) return false; /* betzw - TOASK: "keep the current state and reset the device"
                                                                    What happens e.g. to my open sockets?
                                                                    Depending on the answer to this question we might need
-                                                                   to call `inner_constructor()` and `_free_all_packets()`! */
+                                                                   to call functions LIKE `inner_constructor()` and
+                                                                   `_free_all_packets()`! */
     _wait_console_active();
     return true;
 }
@@ -329,7 +330,8 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     MBED_ASSERT(buffer != NULL);
 
     /* block asynchronous indications */
-    if(_block_async_indications() != 0) return -1;
+    if(_block_async_indications() != 0)
+        return -1;
 
     /* read in data */
     if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
@@ -354,17 +356,28 @@ int SPWFSA01::_block_async_indications() {
         timer.start();
 
         while (_serial.pending()) {
-            if (timer.read_ms() > _timeout) {
+            if (timer.read_ms() > SPWF_MISC_TIMEOUT) {
+#ifdef NDEBUG
                 /* try to unblock asynchronous indications */
                 _parser.send("");
                 _recv_ok();
                 return -1;
+#else // !NDEBUG
+                /* may never happen */
+                error("%s: serial not flushing out correctly!\r\n");
+#endif // !NDEBUG
             }
         }
     }
 
+    /* set immediate timeout */
+    _parser.setTimeout(0);
+
     /* Read all pending indications (by receiving anything) */
-    while(_serial.readable()) _parser.recv("betzw"); // Note: "betzw" is just a non-empty placeholder
+    while(_serial.readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
+
+    /* reset timeout value */
+    _parser.setTimeout(_timeout);
 
     return 0;
 }
@@ -372,25 +385,6 @@ int SPWFSA01::_block_async_indications() {
 void SPWFSA01::_execute_bottom_halves() {
     _network_lost_handler_bh();
     _packet_handler_bh();
-}
-
-void SPWFSA01::_packet_handler_th(void)
-{
-    int spwf_id;
-    int amount;
-
-    /* parse out the socket id & amount */
-    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim_lf())) {
-        return;
-    }
-
-    debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
-
-    /* set that there is pending data for socket */
-    /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
-     *       therefore we just record the socket id without considering the `amount` of data reported!
-     */
-    _set_pending_data(spwf_id);
 }
 
 void SPWFSA01::_read_in_pending(void) {
@@ -524,8 +518,6 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             }
         }
     }
-
-    return -1;
 }
 
 bool SPWFSA01::close(int spwf_id)
@@ -567,7 +559,7 @@ read_in_pending:
 }
 
 /*
- * Handling oob ("Error: Pending Data")
+ * Handling oob ("ERROR: Pending data")
  *
  */
 void SPWFSA01::_pending_data_handler()
@@ -616,16 +608,38 @@ void SPWFSA01::_network_lost_handler_th()
     return;
 }
 
+/*
+ * Handling oob ("+WIND:55:Pending Data")
+ *
+ */
+void SPWFSA01::_packet_handler_th(void)
+{
+    int spwf_id;
+    int amount;
+
+    /* parse out the socket id & amount */
+    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim_lf())) {
+        return;
+    }
+
+    debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
+
+    /* set that there is pending data for socket */
+    /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
+     *       therefore we just record the socket id without considering the `amount` of data reported!
+     */
+    _set_pending_data(spwf_id);
+}
+
 void SPWFSA01::_network_lost_handler_bh()
 {
     bool were_connected;
-    int saved_timeout = _timeout;
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
                                  Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
     Timer timer;
     timer.start();
 
-    setTimeout(SPWF_NETLOST_TIMEOUT);
+    _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
 
     if(!_network_lost_flag) return;
     _network_lost_flag = false;
@@ -657,7 +671,7 @@ void SPWFSA01::_network_lost_handler_bh()
 get_out:
     debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
 
-    setTimeout(saved_timeout);
+    _parser.setTimeout(_timeout);
 
     return;
 }
@@ -693,7 +707,7 @@ void SPWFSA01::_hard_fault_handler()
             reg3 = 0xFFFFFFFF,
             reg12 = 0xFFFFFFFF;
 
-    setTimeout(SPWF_RECV_TIMEOUT);
+    _parser.setTimeout(SPWF_RECV_TIMEOUT);
     _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\r",
                  &console_nr,
                  &reg0, &reg1, &reg2, &reg3, &reg12);
@@ -708,11 +722,12 @@ void SPWFSA01::_hard_fault_handler()
 
     // This is most likely the best we can do to recover from this module hard fault
     _associated_interface.inner_constructor();
+    _parser.setTimeout(_timeout);
 #endif // NDEBUG
 }
 
 /*
- * Handling oob ("+WIND:58")
+ * Handling oob ("+WIND:58:Socket Closed")
  * when server closes a client connection
  */
 void SPWFSA01::_sock_closed_handler()

@@ -48,7 +48,6 @@
  */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
     : _spwf(tx, rx, *this, debug),
-      _isInitialized(false),
       _dbg_on(debug)
 {
     inner_constructor();

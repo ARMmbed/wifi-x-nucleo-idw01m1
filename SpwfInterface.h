@@ -44,10 +44,10 @@
 
 // Various timeouts for different SPWF operations
 #define SPWF_CONNECT_TIMEOUT    60000
-#define SPWF_SEND_TIMEOUT       500
-#define SPWF_RECV_TIMEOUT       100
-#define SPWF_MISC_TIMEOUT       500
 #define SPWF_NETLOST_TIMEOUT    30000
+#define SPWF_SEND_TIMEOUT       500
+#define SPWF_MISC_TIMEOUT       501
+#define SPWF_RECV_TIMEOUT       100
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
@@ -131,6 +131,7 @@ private:
         return _internal_ids[spwf_id];
     }
 
+    /* Called at initialization or after module hard fault */
     void inner_constructor() {
         memset(_ids, 0, sizeof(_ids));
         memset(_cbs, 0, sizeof(_cbs));
@@ -144,6 +145,7 @@ private:
         _spwf.attach(this, &SpwfSAInterface::event);
 
         _connected_to_network = false;
+        _isInitialized = false;
     }
 
 private:
