@@ -729,6 +729,13 @@ void SPWFSA01::_sock_closed_handler()
 
     debug_if(true, "AT^ +WIND:58:Socket Closed:%d\r\n", spwf_id); // betzw - TODO: `true` only for debug!
 
+    /* clear pending data flag */
+    /* betzw - NOTE / TODO: do we need to read in eventually pending data from the module?
+     *                      Currently, assuming that this is may NOT be the case!
+     */
+    _clear_pending_data(spwf_id);
+
+    /* free packets for this socket */
     _free_packets(spwf_id);
 
     internal_id = _associated_interface.get_internal_id(spwf_id);
