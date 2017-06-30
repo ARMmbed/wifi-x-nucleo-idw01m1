@@ -19,7 +19,7 @@
 #include "mbed_debug.h"
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\r", "\n"),
+: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\x0d", "\x0a"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
@@ -74,7 +74,7 @@ bool SPWFSA01::startup(int mode)
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", 1 /* betzw - WAS: mode */) && _recv_ok()))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
@@ -104,7 +104,7 @@ bool SPWFSA01::startup(int mode)
 
 void SPWFSA01::_wait_console_active(void) {
     while(true) {
-        if (_parser.recv("+WIND:0:Console active\r") && _recv_delim_lf()) {
+        if (_parser.recv("+WIND:0:Console active\x0d") && _recv_delim_lf()) {
             debug_if(true, "AT^ +WIND:0:Console active\r\n"); // betzw - TODO: `true` only for debug!
             return;
         }
@@ -182,7 +182,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     reset();
 
     while(true)
-        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4) && _recv_delim_lf())
+        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             debug_if(true, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
             break;
@@ -234,7 +234,7 @@ const char *SPWFSA01::getIPAddress(void)
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
-            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\r", &n1, &n2, &n3, &n4)
+            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getIPAddress error\r\n");
         return NULL;
@@ -251,7 +251,7 @@ const char *SPWFSA01::getMACAddress(void)
     unsigned int n1, n2, n3, n4, n5, n6;
 
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
-            && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r", &n1, &n2, &n3, &n4, &n5, &n6)
+            && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\x0d", &n1, &n2, &n3, &n4, &n5, &n6)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getMACAddress error\r\n");
         return 0;
@@ -279,7 +279,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
         return false;
     }
 
-    if(_parser.recv(" ID: %d\r", &socket_id)
+    if(_parser.recv(" ID: %d\x0d", &socket_id)
             && _recv_ok()) {
         debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
 
@@ -318,7 +318,7 @@ int SPWFSA01::_read_len(int spwf_id) {
     uint32_t amount;
 
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
-            && _parser.recv(" DATALEN: %u\r", &amount)
+            && _parser.recv(" DATALEN: %u\x0d", &amount)
             && _recv_ok())) {
         return -1;
     }
@@ -337,7 +337,7 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     }
 
     /* read in data */
-    if (_parser.send("AT+S.SOCKR=%d,%d" /* betzw - WAS "+S.SOCKR=%d,%d" */, spwf_id, amount)
+    if (_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)
             && (_parser.read(buffer, amount) > 0)
             && _recv_ok()) {
         ret = amount;
@@ -611,7 +611,7 @@ void SPWFSA01::_packet_handler_th(void)
     int amount;
 
     /* parse out the socket id & amount */
-    if (!(_parser.recv(":%d:%d\r", &spwf_id, &amount) && _recv_delim_lf())) {
+    if (!(_parser.recv(":%d:%d\x0d", &spwf_id, &amount) && _recv_delim_lf())) {
         return;
     }
 
@@ -649,7 +649,7 @@ void SPWFSA01::_network_lost_handler_bh()
                 goto get_out;
             }
 
-            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\r",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
+            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                 debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
 
                 _associated_interface._connected_to_network = true;
@@ -683,7 +683,7 @@ void SPWFSA01::_hard_fault_handler()
             reg12 = 0xFFFFFFFF;
 
     _parser.setTimeout(SPWF_RECV_TIMEOUT);
-    _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\r",
+    _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\x0d",
                  &console_nr,
                  &reg0, &reg1, &reg2, &reg3, &reg12);
 #ifndef NDEBUG
@@ -709,7 +709,7 @@ void SPWFSA01::_sock_closed_handler()
 {
     int spwf_id, internal_id;
 
-    if(!(_parser.recv(":%d\r", &spwf_id) && _recv_delim_lf())) {
+    if(!(_parser.recv(":%d\x0d", &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
         error("\r\nSPWFSA01 %s failed!\r\n");
 #endif

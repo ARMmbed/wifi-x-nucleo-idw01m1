@@ -206,15 +206,15 @@ private:
     void _free_all_packets();
 
     bool _recv_delim_lf() {
-        return (_parser.getc() == '\n');
+        return (_parser.getc() == '\x0a');
     }
 
     bool _recv_delim_cr() {
-        return (_parser.getc() == '\n');
+        return (_parser.getc() == '\x0a');
     }
 
     bool _recv_ok() {
-        return _parser.recv("OK\r") && _recv_delim_lf();
+        return _parser.recv("OK\x0d") && _recv_delim_lf();
     }
 
     bool _is_data_pending() {
