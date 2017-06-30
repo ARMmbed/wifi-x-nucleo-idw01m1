@@ -327,59 +327,56 @@ int SPWFSA01::_read_len(int spwf_id) {
 }
 
 int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
+    int ret = -1;
+
     MBED_ASSERT(buffer != NULL);
 
     /* block asynchronous indications */
-    if(_block_async_indications() != 0)
+    if(!_winds_off()) {
         return -1;
+    }
 
     /* read in data */
-    if (!(_parser.send("+S.SOCKR=%d,%d", spwf_id, amount)
+    if (_parser.send("AT+S.SOCKR=%d,%d" /* betzw - WAS "+S.SOCKR=%d,%d" */, spwf_id, amount)
             && (_parser.read(buffer, amount) > 0)
-            && _recv_ok())) {
-        /* Note: not sure if block of async indications has been lifted at this point */
-        return -1;
-    } else {
-        /* Note: block of async indications has been lifted at this point */
-        return amount;
+            && _recv_ok()) {
+        ret = amount;
     }
+
+    _winds_on();
+    return ret;
 }
 
-/* Note: in case of error (return -1) blocking has been (tried to be) lifted */
-int SPWFSA01::_block_async_indications() {
-    /* Send 'AT' without delimiter */
-    if(_parser.printf("AT") <= 0) return -1;
+#define WINDS_OFF "0xFFFFFFFF"
+#define WINDS_ON  "0x00000000"
 
-    /* Wait for command being sent */
-    {
-        Timer timer;
-        timer.start();
+void SPWFSA01::_winds_on() {
+    _parser.send("AT+S.SCFG=wind_off_high," WINDS_ON) && _recv_ok();
+    _parser.send("AT+S.SCFG=wind_off_medium," WINDS_ON) && _recv_ok();
+    _parser.send("AT+S.SCFG=wind_off_low," WINDS_ON) && _recv_ok();
+}
 
-        while (_serial.pending()) {
-            if (timer.read_ms() > SPWF_MISC_TIMEOUT) {
-#ifdef NDEBUG
-                /* try to unblock asynchronous indications */
-                _parser.send("");
-                _recv_ok();
-                return -1;
-#else // !NDEBUG
-                /* may never happen */
-                error("%s: serial not flushing out correctly!\r\n");
-#endif // !NDEBUG
-            }
-        }
+/* Note: in case of error blocking has been (tried to be) lifted */
+bool SPWFSA01::_winds_off() {
+    if (!(_parser.send("AT+S.SCFG=wind_off_low," WINDS_OFF)
+            && _recv_ok())) {
+        _winds_on();
+        return false;
     }
 
-    /* set immediate timeout */
-    _parser.setTimeout(0);
+    if (!(_parser.send("AT+S.SCFG=wind_off_medium," WINDS_OFF)
+            && _recv_ok())) {
+        _winds_on();
+        return false;
+    }
 
-    /* Read all pending indications (by receiving anything) */
-    while(_serial.readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
+    if (!(_parser.send("AT+S.SCFG=wind_off_high," WINDS_OFF)
+            && _recv_ok())) {
+        _winds_on();
+        return false;
+    }
 
-    /* reset timeout value */
-    _parser.setTimeout(_timeout);
-
-    return 0;
+    return true;
 }
 
 void SPWFSA01::_execute_bottom_halves() {
@@ -564,11 +561,7 @@ read_in_pending:
  */
 void SPWFSA01::_pending_data_handler()
 {
-#ifndef NDEBUG
-    error("\r\n SPWFSA01::_pending_data_handler()\r\n");
-#else // NDEBUG
-    debug("\r\n SPWFSA01::_pending_data_handler()\r\n");
-#endif // NDEBUG
+    debug("\r\nwarning: SPWFSA01::_pending_data_handler()\r\n");
 }
 
 /*
@@ -674,24 +667,6 @@ get_out:
     _parser.setTimeout(_timeout);
 
     return;
-}
-
-bool SPWFSA01::_restart_radio()
-{
-    /* disable Wi-Fi radio device */
-    _parser.send("AT+S.WIFI=0");
-
-    if(!(_parser.recv("+WIND:38:WiFi:Powered Down\r") && _recv_delim_lf())) {
-        debug_if(true, "SPWF> Wi-Fi power down failed\r\n"); // betzw - TODO: `true` only for debug!
-        return false;
-    }
-
-    debug_if(true, "AT^ +WIND:38:WiFi:Powered Down\r\n"); // betzw - TODO: `true` only for debug!
-
-    /* enable Wi-Fi radio device */
-    _parser.send("AT+S.WIFI=1");
-
-    return true;
 }
 
 /*

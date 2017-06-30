@@ -197,13 +197,13 @@ private:
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);
-    int _block_async_indications(void);
+    bool _winds_off();
+    void _winds_on();
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
     void _free_packets(int spwf_id);
     void _free_all_packets();
-    bool _restart_radio();
 
     bool _recv_delim_lf() {
         return (_parser.getc() == '\n');
