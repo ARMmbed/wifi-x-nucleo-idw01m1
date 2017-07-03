@@ -131,11 +131,11 @@ bool SPWFSA01::reset(void)
             return false;
         }
 
-    if(!_parser.send("AT+CFUN=1")) return false; /* betzw - TOASK: "keep the current state and reset the device"
-                                                                   What happens e.g. to my open sockets?
-                                                                   Depending on the answer to this question we might need
-                                                                   to call functions LIKE `inner_constructor()` and
-                                                                   `_free_all_packets()`! */
+    if(!_parser.send("AT+CFUN=1")) return false; /* betzw - NOTE: "keep the current state and reset the device"
+                                                                   We assume that the module informs us about the
+                                                                   eventual closing of sockets via "WIND" asynchronous
+                                                                   indications! So everything regarding the clean-up
+                                                                   of these situations is handled there. */
     _wait_console_active();
     return true;
 }
@@ -548,6 +548,9 @@ read_in_pending:
     _packet_handler_bh();
 
     if(ret) {
+        /* clear pending data flag */
+        _clear_pending_data(spwf_id); // betzw: should be redundant.
+
         /* free packets for this socket */
         _free_packets(spwf_id);
     }
@@ -722,7 +725,7 @@ void SPWFSA01::_sock_closed_handler()
 
     /* clear pending data flag */
     /* betzw - NOTE / TODO: do we need to read in eventually pending data from the module?
-     *                      Currently, assuming that this is may NOT be the case!
+     *                      Currently, assuming that this may NOT be the case!
      */
     _clear_pending_data(spwf_id);
 
