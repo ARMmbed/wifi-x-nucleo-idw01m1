@@ -74,7 +74,7 @@ bool SPWFSA01::startup(int mode)
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
         return false;
@@ -131,7 +131,7 @@ bool SPWFSA01::reset(void)
             return false;
         }
 
-    if(!_parser.send("AT+CFUN=1")) return false; /* betzw - NOTE: "keep the current state and reset the device"
+    if(!_parser.send("AT+CFUN=1")) return false; /* betzw - NOTE: "keep the current state and reset the device".
                                                                    We assume that the module informs us about the
                                                                    eventual closing of sockets via "WIND" asynchronous
                                                                    indications! So everything regarding the clean-up
@@ -171,7 +171,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     }
 
     //"AT+S.SCFG=wifi_mode,%d"
-    /*set wifi mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    /*set STA mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "SPWF> error wifi mode set\r\n");
@@ -650,6 +650,7 @@ void SPWFSA01::_network_lost_handler_bh()
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
                     debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                    disconnect();
                     goto get_out;
                 }
 
@@ -665,9 +666,8 @@ void SPWFSA01::_network_lost_handler_bh()
             goto get_out;
         }
 
-        get_out:
+get_out:
         debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
-
         _parser.setTimeout(_timeout);
 
         return;
@@ -702,6 +702,7 @@ void SPWFSA01::_hard_fault_handler()
 
     // This is most likely the best we can do to recover from this module hard fault
     _associated_interface.inner_constructor();
+    _free_all_packets();
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
 }
