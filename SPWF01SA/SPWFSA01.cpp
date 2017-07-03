@@ -34,9 +34,10 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
     _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
-    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
+    _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
     _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
 }
 
@@ -615,6 +616,9 @@ void SPWFSA01::_packet_handler_th(void)
 
     /* parse out the socket id & amount */
     if (!(_parser.recv(":%d:%d\x0d", &spwf_id, &amount) && _recv_delim_lf())) {
+#ifndef NDEBUG
+        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
+#endif
         return;
     }
 
@@ -674,6 +678,12 @@ get_out:
     }
 }
 
+void SPWFSA01::_recover_from_hard_faults(void) {
+    disconnect();
+    _associated_interface.inner_constructor();
+    _free_all_packets();
+}
+
 /*
  * Handling oob ("+WIND:8:Hard Fault")
  *
@@ -691,19 +701,42 @@ void SPWFSA01::_hard_fault_handler()
     _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x\x0d",
                  &console_nr,
                  &reg0, &reg1, &reg2, &reg3, &reg12);
+    _recv_delim_lf();
+
 #ifndef NDEBUG
-    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    error("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 #else // NDEBUG
-    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    debug("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 
     // This is most likely the best we can do to recover from this module hard fault
-    _associated_interface.inner_constructor();
-    _free_all_packets();
+    _recover_from_hard_faults();
     _parser.setTimeout(_timeout);
+#endif // NDEBUG
+}
+
+/*
+ * Handling oob ("+WIND:5:WiFi Hardware Failure")
+ *
+ */
+void SPWFSA01::_wifi_hwfault_handler()
+{
+    int failure_nr;
+
+    /* parse out the socket id & amount */
+    _parser.recv(":%d\x0d", &failure_nr);
+    _recv_delim_lf();
+
+#ifndef NDEBUG
+    error("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+#else // NDEBUG
+    debug("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+
+    // This is most likely the best we can do to recover from this WiFi radio failure
+    _recover_from_hard_faults();
 #endif // NDEBUG
 }
 
@@ -717,7 +750,7 @@ void SPWFSA01::_sock_closed_handler()
 
     if(!(_parser.recv(":%d\x0d", &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\nSPWFSA01 %s failed!\r\n");
+        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
 #endif
         return;
     }
