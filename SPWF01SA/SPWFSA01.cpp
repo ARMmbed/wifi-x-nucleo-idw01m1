@@ -626,47 +626,49 @@ void SPWFSA01::_packet_handler_th(void)
 
 void SPWFSA01::_network_lost_handler_bh()
 {
-    bool were_connected;
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
-    Timer timer;
-    timer.start();
-
-    _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
-
     if(!_network_lost_flag) return;
     _network_lost_flag = false;
 
-    were_connected = isConnected();
-    _associated_interface._connected_to_network = false;
+    {
+        bool were_connected;
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+        Timer timer;
+        timer.start();
 
-    if(were_connected) {
-        uint32_t n1, n2, n3, n4;
+        _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
 
-        while(true) {
-            if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
-                goto get_out;
+        were_connected = isConnected();
+        _associated_interface._connected_to_network = false;
+
+        if(were_connected) {
+            uint32_t n1, n2, n3, n4;
+
+            while(true) {
+                if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
+                    debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                    goto get_out;
+                }
+
+                if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
+                    debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
+
+                    _associated_interface._connected_to_network = true;
+                    goto get_out;
+                }
             }
-
-            if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
-                debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
-
-                _associated_interface._connected_to_network = true;
-                goto get_out;
-            }
+        } else {
+            debug_if(true, "Leaving SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
+            goto get_out;
         }
-    } else {
-        debug_if(true, "Leaving SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
-        goto get_out;
+
+        get_out:
+        debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
+
+        _parser.setTimeout(_timeout);
+
+        return;
     }
-
-get_out:
-    debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
-
-    _parser.setTimeout(_timeout);
-
-    return;
 }
 
 /*
