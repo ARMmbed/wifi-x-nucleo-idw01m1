@@ -251,7 +251,6 @@ nsapi_error_t SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket
 nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
-    nsapi_error_t err = NSAPI_ERROR_OK;
     int internal_id = socket->internal_id;
 
     if(internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
@@ -260,14 +259,14 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) {
         if (!_spwf.close(socket->spwf_id)) {
-            err = NSAPI_ERROR_DEVICE_ERROR;
+            return NSAPI_ERROR_DEVICE_ERROR;
         }
     }
 
     _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
     _ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 
-    return err;
+    return NSAPI_ERROR_OK;
 }
 
 /**

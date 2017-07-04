@@ -191,6 +191,7 @@ private:
     void _network_lost_handler_th();
     void _network_lost_handler_bh();
     void _hard_fault_handler();
+    void _wifi_hwfault_handler();
     void _event_handler();
     void _sock_closed_handler();
     void _wait_console_active();
@@ -202,19 +203,20 @@ private:
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
+    void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets();
 
     bool _recv_delim_lf() {
-        return (_parser.getc() == '\n');
+        return (_parser.getc() == '\x0a');
     }
 
     bool _recv_delim_cr() {
-        return (_parser.getc() == '\n');
+        return (_parser.getc() == '\x0a');
     }
 
     bool _recv_ok() {
-        return _parser.recv("OK\r") && _recv_delim_lf();
+        return _parser.recv("OK\x0d") && _recv_delim_lf();
     }
 
     bool _is_data_pending() {
