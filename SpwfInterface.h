@@ -123,6 +123,11 @@ private:
     } _cbs[SPWFSA_SOCKET_COUNT];
     int _internal_ids[SPWFSA_SOCKET_COUNT];
 
+    char ap_ssid[33]; /* 32 is what 802.11 defines as longest possible name; +1 for the \0 */
+    nsapi_security_t ap_sec;
+    uint8_t ap_ch;
+    char ap_pass[64]; /* The longest allowed passphrase */
+
 private:
     void event(void);
     nsapi_error_t init(void);

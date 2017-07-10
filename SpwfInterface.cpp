@@ -47,8 +47,8 @@
  * @retval none
  */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-    : _spwf(tx, rx, *this, debug),
-      _dbg_on(debug)
+: _spwf(tx, rx, *this, debug),
+  _dbg_on(debug)
 {
     inner_constructor();
 }
@@ -78,20 +78,10 @@ nsapi_error_t SpwfSAInterface::init(void)
     else return NSAPI_ERROR_DEVICE_ERROR;
 }
 
-/**
- * @brief  network connect
- *        connects to Access Point
- * @param  ap: Access Point (AP) Name String
- *         pass_phrase: Password String for AP
- *         security: type of NSAPI security supported
- * @retval NSAPI Error Type
- */
-nsapi_error_t SpwfSAInterface::connect(const char *ap,
-                                       const char *pass_phrase,
-                                       nsapi_security_t security,
-                                       uint8_t channel)
+nsapi_error_t SpwfSAInterface::connect()
 {
     int mode;
+    char *pass_phrase = ap_pass;
 
     //initialize the device before connecting
     if(!_isInitialized)
@@ -100,7 +90,7 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
         _isInitialized=true;
     }
 
-    switch(security)
+    switch(ap_sec)
     {
         case NSAPI_SECURITY_NONE:
             mode = 0;
@@ -128,12 +118,31 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
     // Then: (re-)connect
     _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
-    if (!_spwf.connect(ap, pass_phrase, mode)) {
+    if (!_spwf.connect(ap_ssid, pass_phrase, mode)) {
         return NSAPI_ERROR_NO_CONNECTION;
     }
 
     _connected_to_network = true;
     return NSAPI_ERROR_OK;
+}
+
+/**
+ * @brief  network connect
+ *         connects to Access Point
+ * @param  ap: Access Point (AP) Name String
+ *         pass_phrase: Password String for AP
+ *         security: type of NSAPI security supported
+ * @retval NSAPI Error Type
+ */
+nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi_security_t security,
+                                       uint8_t channel)
+{
+    if (channel != 0) {
+        return NSAPI_ERROR_UNSUPPORTED;
+    }
+
+    set_credentials(ssid, pass, security);
+    return connect();
 }
 
 /**
@@ -398,11 +407,18 @@ void SpwfSAInterface::event(void) {
     }
 }
 
-nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security) //not supported
+nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security)
 {
-    return NSAPI_ERROR_UNSUPPORTED;
-}
+    memset(ap_ssid, 0, sizeof(ap_ssid));
+    strncpy(ap_ssid, ssid, sizeof(ap_ssid));
 
+    memset(ap_pass, 0, sizeof(ap_pass));
+    strncpy(ap_pass, pass, sizeof(ap_pass));
+
+    ap_sec = security;
+
+    return NSAPI_ERROR_OK;
+}
 
 nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 {
@@ -412,11 +428,6 @@ nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 int8_t SpwfSAInterface::get_rssi()
 {
     return 0;  // betzw - TODO: not yet supported!
-}
-
-nsapi_error_t SpwfSAInterface::connect()
-{
-    return NSAPI_ERROR_UNSUPPORTED;
 }
 
 nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
