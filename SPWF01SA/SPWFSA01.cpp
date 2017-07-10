@@ -127,10 +127,10 @@ bool SPWFSA01::reset(void)
 {
     /* save current setting in flash */
     if(!(_parser.send("AT&W") && _parser.recv("OK")))
-        {
-            debug_if(_dbg_on, "SPWF> error AT&W\r\n");
-            return false;
-        }
+    {
+        debug_if(_dbg_on, "SPWF> error AT&W\r\n");
+        return false;
+    }
 
     if(!_parser.send("AT+CFUN=1")) return false; /* betzw - NOTE: "keep the current state and reset the device".
                                                                    We assume that the module informs us about the
@@ -245,6 +245,40 @@ const char *SPWFSA01::getIPAddress(void)
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _ip_buffer;
+}
+
+const char *SPWFSA01::getGateway()
+{
+    unsigned int n1, n2, n3, n4;
+
+    if (!(_parser.send("AT+S.STS=ip_gw")
+            && _parser.recv("#  ip_gw = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
+            && _recv_ok())) {
+        debug_if(_dbg_on, "SPWF> getGateway error\r\n");
+        return NULL;
+    }
+
+    debug_if(_dbg_on, "AT^ #  ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+
+    sprintf((char*)_gateway_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
+    return _gateway_buffer;
+}
+
+const char *SPWFSA01::getNetmask()
+{
+    unsigned int n1, n2, n3, n4;
+
+    if (!(_parser.send("AT+S.STS=ip_netmask")
+            && _parser.recv("#  ip_netmask = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
+            && _recv_ok())) {
+        debug_if(_dbg_on, "SPWF> getNetmask error\r\n");
+        return NULL;
+    }
+
+    debug_if(_dbg_on, "AT^ #  ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+
+    sprintf((char*)_netmask_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
+    return _netmask_buffer;
 }
 
 const char *SPWFSA01::getMACAddress(void)
@@ -541,7 +575,7 @@ bool SPWFSA01::close(int spwf_id)
         goto read_in_pending;
     }
 
-read_in_pending:
+    read_in_pending:
     /* first we need to handle a potential network loss */
     _network_lost_handler_bh();
 
@@ -670,7 +704,7 @@ void SPWFSA01::_network_lost_handler_bh()
             goto get_out;
         }
 
-get_out:
+        get_out:
         debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
         _parser.setTimeout(_timeout);
 

@@ -54,15 +54,6 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
 }
 
 /**
- * @brief  SpwfSAInterface destructor
- * @param  none
- * @retval none
- */
-SpwfSAInterface::~SpwfSAInterface()
-{
-}
-
-/**
  * @brief  init function
  *         initializes SPWF FW and module
  * @param  none
@@ -187,6 +178,16 @@ const char *SpwfSAInterface::get_mac_address()
     return _spwf.getMACAddress();
 }
 
+const char *SpwfSAInterface::get_gateway()
+{
+    return _spwf.getGateway();
+}
+
+const char *SpwfSAInterface::get_netmask()
+{
+    return _spwf.getNetmask();
+}
+
 /**
  * @brief  open a socket handle
  * @param  handle: Pointer to handle
@@ -307,7 +308,7 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
  *         size: size of data
  * @retval no of bytes read
  */
-nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
@@ -335,7 +336,7 @@ nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned si
  *         size: size of data
  * @retval no of bytes sent
  */
-nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
@@ -367,7 +368,7 @@ nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &
  *         size: size of data
  * @retval no of bytes read
  */
-nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t ret;

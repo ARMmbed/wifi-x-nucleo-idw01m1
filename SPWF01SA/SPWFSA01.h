@@ -16,7 +16,7 @@
  
 #ifndef SPWFSA01_H
 #define SPWFSA01_H
- 
+
 #include "ATParser.h"
 
 class SpwfSAInterface;
@@ -83,6 +83,20 @@ public:
      * @return null-terminated MAC address or null if no MAC address is assigned
      */
     const char *getMACAddress(void);
+
+    /** Get the local gateway
+     *
+     *  @return         Null-terminated representation of the local gateway
+     *                  or null if no network mask has been recieved
+     */
+    const char *getGateway();
+
+    /** Get the local network mask
+     *
+     *  @return         Null-terminated representation of the local network mask
+     *                  or null if no network mask has been recieved
+     */
+    const char *getNetmask();
 
     /**
      * Check if SPWFSA01 is connected
@@ -256,6 +270,8 @@ private:
     }
 
     char _ip_buffer[16];
+    char _gateway_buffer[16];
+    char _netmask_buffer[16];
     char _mac_buffer[18];
 };
 
@@ -263,7 +279,7 @@ private:
 class BlockExecuter {
 public:
     BlockExecuter(Callback<void()> exit_cb, Callback<void()> enter_cb = Callback<void()>()) :
-    _exit_cb(exit_cb) {
+        _exit_cb(exit_cb) {
         if((bool)enter_cb) enter_cb();
     }
 
