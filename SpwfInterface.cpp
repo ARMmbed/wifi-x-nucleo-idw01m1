@@ -61,7 +61,7 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
  */
 nsapi_error_t SpwfSAInterface::init(void)
 {
-    _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
+    _spwf.setTimeout(SPWF_INIT_TIMEOUT);
 
     if(_spwf.startup(0)) {
         return true;
@@ -113,6 +113,10 @@ nsapi_error_t SpwfSAInterface::connect()
         return NSAPI_ERROR_NO_CONNECTION;
     }
 
+    if (!_spwf.getIPAddress()) {
+        return NSAPI_ERROR_DHCP_FAILURE;
+    }
+
     _connected_to_network = true;
     return NSAPI_ERROR_OK;
 }
@@ -146,7 +150,7 @@ nsapi_error_t SpwfSAInterface::disconnect()
 {
     CHECK_NOT_CONNECTED_ERR();
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_DISCONNECT_TIMEOUT);
 
     if (!_spwf.disconnect()) {
         return NSAPI_ERROR_DEVICE_ERROR;
@@ -164,6 +168,7 @@ nsapi_error_t SpwfSAInterface::disconnect()
  */
 const char *SpwfSAInterface::get_ip_address()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getIPAddress();
 }
 
@@ -175,16 +180,19 @@ const char *SpwfSAInterface::get_ip_address()
  */
 const char *SpwfSAInterface::get_mac_address()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getMACAddress();
 }
 
 const char *SpwfSAInterface::get_gateway()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getGateway();
 }
 
 const char *SpwfSAInterface::get_netmask()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getNetmask();
 }
 
@@ -230,7 +238,7 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_IS_CONNECTED;
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_OPEN_TIMEOUT);
 
     const char *proto = (socket->proto == NSAPI_UDP) ? "u" : "t"; //"s" for secure socket?
 
@@ -265,7 +273,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 
     if(internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_CLOSE_TIMEOUT);
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) {
         if (!_spwf.close(socket->spwf_id)) {
@@ -293,6 +301,10 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
     CHECK_NOT_CONNECTED_ERR();
 
     _spwf.setTimeout(SPWF_SEND_TIMEOUT);
+
+    if(socket->spwf_id == SPWFSA_SOCKET_COUNT) {
+        return NSAPI_ERROR_NO_ADDRESS;
+    }
 
     if (!_spwf.send(socket->spwf_id, data, size)) {
         return NSAPI_ERROR_DEVICE_ERROR;
@@ -343,7 +355,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
     CHECK_NOT_CONNECTED_ERR();
 
     if ((socket->spwf_id != SPWFSA_SOCKET_COUNT) && (socket->addr != addr)) {
-        _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+        _spwf.setTimeout(SPWF_SENDTO_TIMEOUT);
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
@@ -433,5 +445,6 @@ int8_t SpwfSAInterface::get_rssi()
 
 nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
-    return NSAPI_ERROR_UNSUPPORTED;
+    _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
+    return _spwf.scan(res, count);
 }

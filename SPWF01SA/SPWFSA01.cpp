@@ -234,7 +234,7 @@ const char *SPWFSA01::getIPAddress(void)
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.STS=ip_ipaddr")
+    if (!(_parser.send("AT+S.GCFG=ip_ipaddr")
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getIPAddress error\r\n");
@@ -251,7 +251,7 @@ const char *SPWFSA01::getGateway()
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.STS=ip_gw")
+    if (!(_parser.send("AT+S.GCFG=ip_gw")
             && _parser.recv("#  ip_gw = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getGateway error\r\n");
@@ -268,7 +268,7 @@ const char *SPWFSA01::getNetmask()
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.STS=ip_netmask")
+    if (!(_parser.send("AT+S.GCFG=ip_netmask")
             && _parser.recv("#  ip_netmask = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getNetmask error\r\n");
@@ -316,11 +316,20 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(_parser.recv(" ID: %d\x0d", &socket_id)
             && _recv_ok()) {
-        debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
+        debug_if(true, "AT^  ID: %d\r\n", socket_id);  // betzw - TODO: `true` only for debug!
 
         *spwf_id = socket_id;
         return true;
     }
+
+    /* try to capture error message */
+    _parser.setTimeout(SPWF_ERROR_TIMEOUT);
+    if(_parser.recv("ERROR: Failed to connect\x0d") && _recv_delim_lf()) {
+        debug_if(true, "AT^ ERROR: Failed to connect\r\n"); // betzw - TODO: `true` only for debug!
+    } else {
+        debug_if(true, "ERROR: %s(%d): failed\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+    }
+    _parser.setTimeout(_timeout);
 
     return false;
 }
@@ -575,7 +584,7 @@ bool SPWFSA01::close(int spwf_id)
         goto read_in_pending;
     }
 
-    read_in_pending:
+read_in_pending:
     /* first we need to handle a potential network loss */
     _network_lost_handler_bh();
 
@@ -747,6 +756,7 @@ void SPWFSA01::_hard_fault_handler()
           reg0, reg1, reg2, reg3, reg12);
 
     // This is most likely the best we can do to recover from this module hard fault
+    _parser.setTimeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
@@ -824,4 +834,94 @@ bool SPWFSA01::writeable()
 void SPWFSA01::attach(Callback<void()> func)
 {
     _callback_func = func;
+}
+
+bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
+{
+    int dummy_nr;
+    bool ret;
+
+    /*
+    bool ret = _parser.recv("+CWLAP:(%d,\"%32[^\"]\",%hhd,\"%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\",%d", &sec, ap->ssid,
+                            &ap->rssi, &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4],
+                            &ap->bssid[5], &ap->channel);
+     */
+
+    ap->security = NSAPI_SECURITY_UNKNOWN;
+
+    ret = _parser.recv("%d:\x09 BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %d RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
+                       &dummy_nr,
+                       &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
+                       &ap->channel, &ap->rssi, &ap->ssid);
+    if(ret) {
+        int value;
+
+        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 "
+            value = _parser.getc();
+        }
+
+        /* get initial character of security protocol */
+        value = _parser.getc();
+        if((value != 'W') && (value != '\x0d')) {
+             goto get_out;
+        } else if(value == '\x0d') {
+            ap->security = NSAPI_SECURITY_NONE;
+            goto get_out;
+        }
+
+        /* got a "W" */
+        /* get second character of security protocol */
+        value = _parser.getc();
+        if((value != 'E') && (value != 'P')) { // ???
+            goto get_out;
+        } else if(value == 'E') { /* got a "WE" */
+            ret = _parser.recv("P\x0d");
+            if(ret) {
+                ap->security = NSAPI_SECURITY_WEP;
+            }
+            goto get_out;
+        }
+
+        /* got a "WP" */
+        /* get third character of security protocol */
+        value = _parser.getc();
+        if(value != 'A') { // ???
+            goto get_out;
+        }
+
+        /* got a "WAP" */
+        /* get fourth character of security protocol */
+        value = _parser.getc();
+        // TODO ...
+
+        // betzw - WAS: ap->security = sec < 5 ? (nsapi_security_t)sec : NSAPI_SECURITY_UNKNOWN;
+    }
+
+get_out:
+    return (ret) ? _recv_delim_lf() : false;
+}
+
+int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
+{
+    unsigned cnt = 0;
+    nsapi_wifi_ap_t ap;
+
+    if (!_parser.send("AT+S.SCAN")) {
+        return NSAPI_ERROR_DEVICE_ERROR;
+    }
+
+    while (_recv_ap(&ap)) {
+        if (cnt < limit) {
+            res[cnt] = WiFiAccessPoint(ap);
+        }
+
+        cnt++;
+        if (limit != 0 && cnt >= limit) {
+            break;
+        }
+    }
+
+    _recv_ok();
+
+    return cnt;
 }

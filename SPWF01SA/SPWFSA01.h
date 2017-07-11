@@ -105,6 +105,15 @@ public:
      */
     bool isConnected(void);
 
+    /** Scan for available networks
+     *
+     * @param  ap    Pointer to allocated array to store discovered AP
+     * @param  limit Size of allocated @a res array, or 0 to only count available AP
+     * @return       Number of entries in @a res, or if @a count was 0 number of available networks, negative on error
+     *               see @a nsapi_error
+     */
+    nsapi_size_or_error_t scan(WiFiAccessPoint *res, unsigned limit);
+
     /**
      * Open a socketed connection
      *
@@ -220,13 +229,14 @@ private:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets();
+    bool _recv_ap(nsapi_wifi_ap_t *ap);
 
     bool _recv_delim_lf() {
         return (_parser.getc() == '\x0a');
     }
 
     bool _recv_delim_cr() {
-        return (_parser.getc() == '\x0a');
+        return (_parser.getc() == '\x0d');
     }
 
     bool _recv_ok() {
