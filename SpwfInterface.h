@@ -47,14 +47,14 @@
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_ERROR_TIMEOUT      10000
 #define SPWF_INIT_TIMEOUT       6000
+#define SPWF_SCAN_TIMEOUT       3001
 #define SPWF_OPEN_TIMEOUT       3000
-#define SPWF_SENDTO_TIMEOUT     2000
-#define SPWF_HF_TIMEOUT         2001
-#define SPWF_CLOSE_TIMEOUT      1000
-#define SPWF_DISCONNECT_TIMEOUT 1001
+#define SPWF_SENDTO_TIMEOUT     2001
+#define SPWF_HF_TIMEOUT         2000
+#define SPWF_CLOSE_TIMEOUT      1001
+#define SPWF_DISCONNECT_TIMEOUT 1000
 #define SPWF_SEND_TIMEOUT       500
 #define SPWF_MISC_TIMEOUT       200
-#define SPWF_SCAN_TIMEOUT       201
 #define SPWF_RECV_TIMEOUT       100
 
 /** SpwfSAInterface class
@@ -153,7 +153,7 @@ public:
      *  user can allocated necessary memory. If the @count is grater than 0 and the @a ap is not NULL it'll be populated
      *  with discovered networks up to value of @a count.
      *
-     *  @param  ap       Pointer to allocated array to store discovered AP
+     *  @param  res      Pointer to allocated array to store discovered AP
      *  @param  count    Size of allocated @a res array, or 0 to only count available AP
      *  @return          Number of entries in @a, or if @a count was 0 number of available networks,
      *                   negative on error see @a nsapi_error

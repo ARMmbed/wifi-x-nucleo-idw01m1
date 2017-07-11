@@ -186,12 +186,16 @@ const char *SpwfSAInterface::get_mac_address()
 
 const char *SpwfSAInterface::get_gateway()
 {
+    if(!_connected_to_network) return NULL;
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getGateway();
 }
 
 const char *SpwfSAInterface::get_netmask()
 {
+    if(!_connected_to_network) return NULL;
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getNetmask();
 }
@@ -445,6 +449,8 @@ int8_t SpwfSAInterface::get_rssi()
 
 nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
+    if(!_isInitialized) return NSAPI_ERROR_DEVICE_ERROR;
+
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
     return _spwf.scan(res, count);
 }

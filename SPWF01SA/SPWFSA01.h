@@ -239,6 +239,10 @@ private:
         return (_parser.getc() == '\x0d');
     }
 
+    bool _recv_delim_cr_lf() {
+        return _recv_delim_cr() && _recv_delim_lf();
+    }
+
     bool _recv_ok() {
         return _parser.recv("OK\x0d") && _recv_delim_lf();
     }

@@ -316,7 +316,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(_parser.recv(" ID: %d\x0d", &socket_id)
             && _recv_ok()) {
-        debug_if(true, "AT^  ID: %d\r\n", socket_id);  // betzw - TODO: `true` only for debug!
+        debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
 
         *spwf_id = socket_id;
         return true;
@@ -838,73 +838,94 @@ void SPWFSA01::attach(Callback<void()> func)
 
 bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 {
-    int dummy_nr;
     bool ret;
-
-    /*
-    bool ret = _parser.recv("+CWLAP:(%d,\"%32[^\"]\",%hhd,\"%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\",%d", &sec, ap->ssid,
-                            &ap->rssi, &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4],
-                            &ap->bssid[5], &ap->channel);
-     */
+    unsigned int channel;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
-    ret = _parser.recv("%d:\x09 BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %d RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
-                       &dummy_nr,
+    /* check for end of list */
+    if(_recv_delim_cr_lf()) {
+        return false;
+    }
+
+    /* run to 'horizontal tab' */
+    while(_parser.getc() != '\x09');
+
+    /* read in next line */
+    ret = _parser.recv(" BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
-                       &ap->channel, &ap->rssi, &ap->ssid);
+                       &channel, &ap->rssi, &ap->ssid);
+
     if(ret) {
         int value;
 
+        /* copy values */
+        ap->channel = channel;
+
+        /* skip 'CAPS' */
         for(int i = 0; i < 6; i++) { // read next six characters (" 0421 "
-            value = _parser.getc();
+            _parser.getc();
         }
 
-        /* get initial character of security protocol */
+        /* get next character */
         value = _parser.getc();
-        if((value != 'W') && (value != '\x0d')) {
-             goto get_out;
-        } else if(value == '\x0d') {
+        if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
             goto get_out;
         }
 
-        /* got a "W" */
-        /* get second character of security protocol */
-        value = _parser.getc();
-        if((value != 'E') && (value != 'P')) { // ???
-            goto get_out;
-        } else if(value == 'E') { /* got a "WE" */
-            ret = _parser.recv("P\x0d");
-            if(ret) {
+        /* determine security */
+        {
+            char buffer[10];
+
+            if(!_parser.recv("%s ", &buffer)) {
+                goto get_out;
+            } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
+                goto get_out;
+            } else if(strncmp("PA2", buffer, 10) == 0) {
+                ap->security = NSAPI_SECURITY_WPA2;
+                goto get_out;
+            } else if(strncmp("PA", buffer, 10) != 0) {
+                goto get_out;
             }
-            goto get_out;
+
+            /* got a "WPA", check for "WPA2" */
+            value = _parser.getc();
+            if(value == '\x0d') { // no further protocol
+                ap->security = NSAPI_SECURITY_WPA;
+                goto get_out;
+            } else { // assume "WPA2"
+                ap->security = NSAPI_SECURITY_WPA_WPA2;
+                goto get_out;
+            }
         }
-
-        /* got a "WP" */
-        /* get third character of security protocol */
-        value = _parser.getc();
-        if(value != 'A') { // ???
-            goto get_out;
-        }
-
-        /* got a "WAP" */
-        /* get fourth character of security protocol */
-        value = _parser.getc();
-        // TODO ...
-
-        // betzw - WAS: ap->security = sec < 5 ? (nsapi_security_t)sec : NSAPI_SECURITY_UNKNOWN;
+    } else {
+        debug("Should never happen!\r\n");
     }
 
 get_out:
-    return (ret) ? _recv_delim_lf() : false;
+    if(ret) {
+        /* wait for next line feed */
+        while(!_recv_delim_lf());
+    }
+
+    return ret;
 }
 
 int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
 {
     unsigned cnt = 0;
     nsapi_wifi_ap_t ap;
+
+#ifndef NDEBUG
+    /* trigger scan */
+    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
+        return false;
+    }
+#endif
 
     if (!_parser.send("AT+S.SCAN")) {
         return NSAPI_ERROR_DEVICE_ERROR;
