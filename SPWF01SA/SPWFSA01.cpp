@@ -234,7 +234,7 @@ const char *SPWFSA01::getIPAddress(void)
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.STS=ip_ipaddr")
+    if (!(_parser.send("AT+S.GCFG=ip_ipaddr")
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "SPWF> getIPAddress error\r\n");
@@ -245,6 +245,40 @@ const char *SPWFSA01::getIPAddress(void)
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _ip_buffer;
+}
+
+const char *SPWFSA01::getGateway()
+{
+    unsigned int n1, n2, n3, n4;
+
+    if (!(_parser.send("AT+S.GCFG=ip_gw")
+            && _parser.recv("#  ip_gw = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
+            && _recv_ok())) {
+        debug_if(_dbg_on, "SPWF> getGateway error\r\n");
+        return NULL;
+    }
+
+    debug_if(_dbg_on, "AT^ #  ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+
+    sprintf((char*)_gateway_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
+    return _gateway_buffer;
+}
+
+const char *SPWFSA01::getNetmask()
+{
+    unsigned int n1, n2, n3, n4;
+
+    if (!(_parser.send("AT+S.GCFG=ip_netmask")
+            && _parser.recv("#  ip_netmask = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
+            && _recv_ok())) {
+        debug_if(_dbg_on, "SPWF> getNetmask error\r\n");
+        return NULL;
+    }
+
+    debug_if(_dbg_on, "AT^ #  ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+
+    sprintf((char*)_netmask_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
+    return _netmask_buffer;
 }
 
 const char *SPWFSA01::getMACAddress(void)
@@ -287,6 +321,15 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
         *spwf_id = socket_id;
         return true;
     }
+
+    /* try to capture error message */
+    _parser.setTimeout(SPWF_ERROR_TIMEOUT);
+    if(_parser.recv("ERROR: Failed to connect\x0d") && _recv_delim_lf()) {
+        debug_if(_dbg_on, "AT^ ERROR: Failed to connect\r\n");
+    } else {
+        debug_if(_dbg_on, "ERROR: %s(%d): failed\r\n", __func__, __LINE__);
+    }
+    _parser.setTimeout(_timeout);
 
     return false;
 }
@@ -637,45 +680,45 @@ void SPWFSA01::_network_lost_handler_bh()
     _network_lost_flag = false;
 
     {
-    bool were_connected;
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
-    Timer timer;
-    timer.start();
+        bool were_connected;
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+        Timer timer;
+        timer.start();
 
-    _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
+        _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
 
-    were_connected = isConnected();
-    _associated_interface._connected_to_network = false;
+        were_connected = isConnected();
+        _associated_interface._connected_to_network = false;
 
-    if(were_connected) {
-        uint32_t n1, n2, n3, n4;
+        if(were_connected) {
+            uint32_t n1, n2, n3, n4;
 
-        while(true) {
-            if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                debug_if(_dbg_on, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__);
+            while(true) {
+                if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
+                    debug_if(_dbg_on, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
-                goto get_out;
-            }
+                    goto get_out;
+                }
 
                 if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
-                debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
+                    debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
-                _associated_interface._connected_to_network = true;
-                goto get_out;
+                    _associated_interface._connected_to_network = true;
+                    goto get_out;
+                }
             }
+        } else {
+            debug_if(_dbg_on, "Leaving SPWFSA01::_network_lost_handler_bh\r\n");
+            goto get_out;
         }
-    } else {
-        debug_if(_dbg_on, "Leaving SPWFSA01::_network_lost_handler_bh\r\n");
-        goto get_out;
-    }
 
 get_out:
-    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n");
-    _parser.setTimeout(_timeout);
+        debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n");
+        _parser.setTimeout(_timeout);
 
-    return;
-}
+        return;
+    }
 }
 
 void SPWFSA01::_recover_from_hard_faults(void) {
@@ -704,15 +747,16 @@ void SPWFSA01::_hard_fault_handler()
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    error("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 #else // NDEBUG
-    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    debug("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 
     // This is most likely the best we can do to recover from this module hard fault
+    _parser.setTimeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
@@ -790,4 +834,115 @@ bool SPWFSA01::writeable()
 void SPWFSA01::attach(Callback<void()> func)
 {
     _callback_func = func;
+}
+
+bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
+{
+    bool ret;
+    unsigned int channel;
+
+    ap->security = NSAPI_SECURITY_UNKNOWN;
+
+    /* check for end of list */
+    if(_recv_delim_cr_lf()) {
+        return false;
+    }
+
+    /* run to 'horizontal tab' */
+    while(_parser.getc() != '\x09');
+
+    /* read in next line */
+    ret = _parser.recv(" BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
+                       &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
+                       &channel, &ap->rssi, &ap->ssid);
+
+    if(ret) {
+        int value;
+
+        /* copy values */
+        ap->channel = channel;
+
+        /* skip 'CAPS' */
+        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 "
+            _parser.getc();
+        }
+
+        /* get next character */
+        value = _parser.getc();
+        if(value != 'W') { // no security
+            ap->security = NSAPI_SECURITY_NONE;
+            goto get_out;
+        }
+
+        /* determine security */
+        {
+            char buffer[10];
+
+            if(!_parser.recv("%s ", &buffer)) {
+                goto get_out;
+            } else if(strncmp("EP", buffer, 10) == 0) {
+                ap->security = NSAPI_SECURITY_WEP;
+                goto get_out;
+            } else if(strncmp("PA2", buffer, 10) == 0) {
+                ap->security = NSAPI_SECURITY_WPA2;
+                goto get_out;
+            } else if(strncmp("PA", buffer, 10) != 0) {
+                goto get_out;
+            }
+
+            /* got a "WPA", check for "WPA2" */
+            value = _parser.getc();
+            if(value == '\x0d') { // no further protocol
+                ap->security = NSAPI_SECURITY_WPA;
+                goto get_out;
+            } else { // assume "WPA2"
+                ap->security = NSAPI_SECURITY_WPA_WPA2;
+                goto get_out;
+            }
+        }
+    } else {
+        debug("Should never happen!\r\n");
+    }
+
+get_out:
+    if(ret) {
+        /* wait for next line feed */
+        while(!_recv_delim_lf());
+    }
+
+    return ret;
+}
+
+int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
+{
+    unsigned cnt = 0;
+    nsapi_wifi_ap_t ap;
+
+#ifndef NDEBUG
+    /* trigger scan */
+    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
+        return false;
+    }
+#endif
+
+    if (!_parser.send("AT+S.SCAN")) {
+        return NSAPI_ERROR_DEVICE_ERROR;
+    }
+
+    while (_recv_ap(&ap)) {
+        if (cnt < limit) {
+            res[cnt] = WiFiAccessPoint(ap);
+        }
+
+        cnt++;
+        if (limit != 0 && cnt >= limit) {
+            break;
+        }
+    }
+
+    _recv_ok();
+
+    return cnt;
 }

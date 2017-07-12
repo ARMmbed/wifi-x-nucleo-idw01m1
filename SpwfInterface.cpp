@@ -47,19 +47,10 @@
  * @retval none
  */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-    : _spwf(tx, rx, *this, debug),
-      _dbg_on(debug)
+: _spwf(tx, rx, *this, debug),
+  _dbg_on(debug)
 {
     inner_constructor();
-}
-
-/**
- * @brief  SpwfSAInterface destructor
- * @param  none
- * @retval none
- */
-SpwfSAInterface::~SpwfSAInterface()
-{
 }
 
 /**
@@ -70,7 +61,7 @@ SpwfSAInterface::~SpwfSAInterface()
  */
 nsapi_error_t SpwfSAInterface::init(void)
 {
-    _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
+    _spwf.setTimeout(SPWF_INIT_TIMEOUT);
 
     if(_spwf.startup(0)) {
         return true;
@@ -78,20 +69,10 @@ nsapi_error_t SpwfSAInterface::init(void)
     else return NSAPI_ERROR_DEVICE_ERROR;
 }
 
-/**
- * @brief  network connect
- *        connects to Access Point
- * @param  ap: Access Point (AP) Name String
- *         pass_phrase: Password String for AP
- *         security: type of NSAPI security supported
- * @retval NSAPI Error Type
- */
-nsapi_error_t SpwfSAInterface::connect(const char *ap,
-                                       const char *pass_phrase,
-                                       nsapi_security_t security,
-                                       uint8_t channel)
+nsapi_error_t SpwfSAInterface::connect()
 {
     int mode;
+    char *pass_phrase = ap_pass;
 
     //initialize the device before connecting
     if(!_isInitialized)
@@ -100,7 +81,7 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
         _isInitialized=true;
     }
 
-    switch(security)
+    switch(ap_sec)
     {
         case NSAPI_SECURITY_NONE:
             mode = 0;
@@ -128,12 +109,35 @@ nsapi_error_t SpwfSAInterface::connect(const char *ap,
     // Then: (re-)connect
     _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
-    if (!_spwf.connect(ap, pass_phrase, mode)) {
+    if (!_spwf.connect(ap_ssid, pass_phrase, mode)) {
         return NSAPI_ERROR_NO_CONNECTION;
+    }
+
+    if (!_spwf.getIPAddress()) {
+        return NSAPI_ERROR_DHCP_FAILURE;
     }
 
     _connected_to_network = true;
     return NSAPI_ERROR_OK;
+}
+
+/**
+ * @brief  network connect
+ *         connects to Access Point
+ * @param  ap: Access Point (AP) Name String
+ *         pass_phrase: Password String for AP
+ *         security: type of NSAPI security supported
+ * @retval NSAPI Error Type
+ */
+nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi_security_t security,
+                                       uint8_t channel)
+{
+    if (channel != 0) {
+        return NSAPI_ERROR_UNSUPPORTED;
+    }
+
+    set_credentials(ssid, pass, security);
+    return connect();
 }
 
 /**
@@ -146,7 +150,7 @@ nsapi_error_t SpwfSAInterface::disconnect()
 {
     CHECK_NOT_CONNECTED_ERR();
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_DISCONNECT_TIMEOUT);
 
     if (!_spwf.disconnect()) {
         return NSAPI_ERROR_DEVICE_ERROR;
@@ -164,6 +168,7 @@ nsapi_error_t SpwfSAInterface::disconnect()
  */
 const char *SpwfSAInterface::get_ip_address()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getIPAddress();
 }
 
@@ -175,7 +180,24 @@ const char *SpwfSAInterface::get_ip_address()
  */
 const char *SpwfSAInterface::get_mac_address()
 {
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getMACAddress();
+}
+
+const char *SpwfSAInterface::get_gateway()
+{
+    if(!_connected_to_network) return NULL;
+
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    return _spwf.getGateway();
+}
+
+const char *SpwfSAInterface::get_netmask()
+{
+    if(!_connected_to_network) return NULL;
+
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    return _spwf.getNetmask();
 }
 
 /**
@@ -220,7 +242,7 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_IS_CONNECTED;
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_OPEN_TIMEOUT);
 
     const char *proto = (socket->proto == NSAPI_UDP) ? "u" : "t"; //"s" for secure socket?
 
@@ -255,7 +277,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 
     if(internal_id == SPWFSA_SOCKET_COUNT) return NSAPI_ERROR_NO_SOCKET;
 
-    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    _spwf.setTimeout(SPWF_CLOSE_TIMEOUT);
 
     if(socket->spwf_id != SPWFSA_SOCKET_COUNT) {
         if (!_spwf.close(socket->spwf_id)) {
@@ -284,6 +306,10 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
 
     _spwf.setTimeout(SPWF_SEND_TIMEOUT);
 
+    if(socket->spwf_id == SPWFSA_SOCKET_COUNT) {
+        return NSAPI_ERROR_NO_ADDRESS;
+    }
+
     if (!_spwf.send(socket->spwf_id, data, size)) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
@@ -298,7 +324,7 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
  *         size: size of data
  * @retval no of bytes read
  */
-nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
@@ -326,14 +352,14 @@ nsapi_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned si
  *         size: size of data
  * @retval no of bytes sent
  */
-nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     CHECK_NOT_CONNECTED_ERR();
 
     if ((socket->spwf_id != SPWFSA_SOCKET_COUNT) && (socket->addr != addr)) {
-        _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+        _spwf.setTimeout(SPWF_SENDTO_TIMEOUT);
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
@@ -358,7 +384,7 @@ nsapi_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &
  *         size: size of data
  * @retval no of bytes read
  */
-nsapi_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t ret;
@@ -398,11 +424,18 @@ void SpwfSAInterface::event(void) {
     }
 }
 
-nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security) //not supported
+nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security)
 {
-    return NSAPI_ERROR_UNSUPPORTED;
-}
+    memset(ap_ssid, 0, sizeof(ap_ssid));
+    strncpy(ap_ssid, ssid, sizeof(ap_ssid));
 
+    memset(ap_pass, 0, sizeof(ap_pass));
+    strncpy(ap_pass, pass, sizeof(ap_pass));
+
+    ap_sec = security;
+
+    return NSAPI_ERROR_OK;
+}
 
 nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 {
@@ -414,12 +447,10 @@ int8_t SpwfSAInterface::get_rssi()
     return 0;  // betzw - TODO: not yet supported!
 }
 
-nsapi_error_t SpwfSAInterface::connect()
-{
-    return NSAPI_ERROR_UNSUPPORTED;
-}
-
 nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
-    return NSAPI_ERROR_UNSUPPORTED;
+    if(!_isInitialized) return NSAPI_ERROR_DEVICE_ERROR;
+
+    _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
+    return _spwf.scan(res, count);
 }
