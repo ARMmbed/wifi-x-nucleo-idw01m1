@@ -364,7 +364,7 @@ int SPWFSA01::_read_len(int spwf_id) {
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(" DATALEN: %u\x0d", &amount)
             && _recv_ok())) {
-        return -1;
+        return 0;
     }
 
     return (int)amount;
@@ -563,7 +563,6 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 
 bool SPWFSA01::close(int spwf_id)
 {
-    int amount;
     bool ret = false;
 
     if(spwf_id == SPWFSA_SOCKET_COUNT) {
@@ -572,7 +571,7 @@ bool SPWFSA01::close(int spwf_id)
 
     // Flush out pending data
     while(true) {
-        amount = _read_in_packet(spwf_id);
+        int amount = _read_in_packet(spwf_id);
         if(amount < 0) goto read_in_pending;
         if(amount == 0) break; // no more data to be read
     }
