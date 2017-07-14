@@ -310,7 +310,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
-        debug_if(_dbg_on, "SPWF> error opening socket\r\n");
+        debug_if(_dbg_on, "SPWF> error opening socket (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -323,11 +323,12 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     }
 
     /* try to capture error message */
+    /* betzw - NOTE: must be handled immediately! */
     _parser.setTimeout(SPWF_ERROR_TIMEOUT);
     if(_parser.recv("ERROR: Failed to connect\x0d") && _recv_delim_lf()) {
         debug_if(true, "AT^ ERROR: Failed to connect\r\n"); // betzw - TODO: `true` only for debug!
     } else {
-        debug_if(true, "ERROR: %s(%d): failed\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+        debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
     }
     _parser.setTimeout(_timeout);
 
@@ -370,6 +371,17 @@ int SPWFSA01::_read_len(int spwf_id) {
     return (int)amount;
 }
 
+void SPWFSA01::_read_in_pending_winds(void) {
+    /* set immediate timeout */
+    _parser.setTimeout(0);
+
+    /* Read all pending indications (by receiving anything) */
+    while(_serial.readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
+
+    /* reset timeout value */
+    _parser.setTimeout(_timeout);
+}
+
 int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     int ret = -1;
 
@@ -379,6 +391,9 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     if(!_winds_off()) {
         return -1;
     }
+
+    /* read in pending indications */
+    _read_in_pending_winds();
 
     /* read in data */
     if (_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)
@@ -605,9 +620,9 @@ read_in_pending:
  * Handling oob ("ERROR: Pending data")
  *
  */
-void SPWFSA01::_pending_data_handler()
+void SPWFSA01::_pending_data_handler(void)
 {
-    debug("\r\nwarning: SPWFSA01::_pending_data_handler()\r\n");
+    debug("\r\nwarning: SPWFSA01::_pending_data_handler(), %s\r\n", _recv_ok() ? "true" : "false");
 }
 
 /*
@@ -616,7 +631,7 @@ void SPWFSA01::_pending_data_handler()
  * Note: executed in IRQ context!
  *
  */
-void SPWFSA01::_event_handler()
+void SPWFSA01::_event_handler(void)
 {
     if((bool)_callback_func && !_is_event_callback_blocked())
         _callback_func();
@@ -626,7 +641,7 @@ void SPWFSA01::_event_handler()
  * Handling oob ("+WIND:33:WiFi Network Lost")
  *
  */
-void SPWFSA01::_network_lost_handler_th()
+void SPWFSA01::_network_lost_handler_th(void)
 {
 #ifndef NDEBUG
     static unsigned int net_loss_cnt = 0;
@@ -673,7 +688,7 @@ void SPWFSA01::_packet_handler_th(void)
     _set_pending_data(spwf_id);
 }
 
-void SPWFSA01::_network_lost_handler_bh()
+void SPWFSA01::_network_lost_handler_bh(void)
 {
     if(!_network_lost_flag) return;
     _network_lost_flag = false;
@@ -730,7 +745,7 @@ void SPWFSA01::_recover_from_hard_faults(void) {
  * Handling oob ("+WIND:8:Hard Fault")
  *
  */
-void SPWFSA01::_hard_fault_handler()
+void SPWFSA01::_hard_fault_handler(void)
 {
     int console_nr = -1;
     int reg0 = 0xFFFFFFFF,
@@ -765,7 +780,7 @@ void SPWFSA01::_hard_fault_handler()
  * Handling oob ("+WIND:5:WiFi Hardware Failure")
  *
  */
-void SPWFSA01::_wifi_hwfault_handler()
+void SPWFSA01::_wifi_hwfault_handler(void)
 {
     int failure_nr;
 
@@ -787,7 +802,7 @@ void SPWFSA01::_wifi_hwfault_handler()
  * Handling oob ("+WIND:58:Socket Closed")
  * when server closes a client connection
  */
-void SPWFSA01::_sock_closed_handler()
+void SPWFSA01::_sock_closed_handler(void)
 {
     int spwf_id, internal_id;
 
@@ -820,12 +835,12 @@ void SPWFSA01::setTimeout(uint32_t timeout_ms)
     _parser.setTimeout(timeout_ms);
 }
 
-bool SPWFSA01::readable()
+bool SPWFSA01::readable(void)
 {
     return _serial.readable();
 }
 
-bool SPWFSA01::writeable()
+bool SPWFSA01::writeable(void)
 {
     return _serial.writeable();
 }
