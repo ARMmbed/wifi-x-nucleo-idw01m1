@@ -306,6 +306,7 @@ bool SPWFSA01::isConnected(void)
 bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
+    int value;
     BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
@@ -314,23 +315,45 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
         return false;
     }
 
-    if(_parser.recv(" ID: %d\x0d", &socket_id)
-            && _recv_ok()) {
-        debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
+    /* handle both response possibilities here before returning
+     * otherwise module seems to remain in inconsistent state.
+     */
 
-        *spwf_id = socket_id;
-        return true;
-    }
+    /* wait for first character */
+    while((value = _parser.getc()) < 0);
 
-    /* try to capture error message */
-    /* betzw - NOTE: must be handled immediately! */
-    _parser.setTimeout(SPWF_ERROR_TIMEOUT);
-    if(_parser.recv("ERROR: Failed to connect\x0d") && _recv_delim_lf()) {
-        debug_if(true, "AT^ ERROR: Failed to connect\r\n"); // betzw - TODO: `true` only for debug!
-    } else {
+    if(value != '\x0d') { // Note: this is different to what the spec exactly says
         debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+        return false;
     }
-    _parser.setTimeout(_timeout);
+
+    if(!_recv_delim_lf()) { // Note: this is different to what the spec exactly says
+        debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+        return false;
+    }
+
+    value = _parser.getc();
+    switch(value) {
+        case ' ':
+            if(_parser.recv("ID: %d\x0d", &socket_id)
+                    && _recv_ok()) {
+                debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
+
+                *spwf_id = socket_id;
+                return true;
+            }
+            break;
+        case 'E':
+            if(_parser.recv("RROR: Failed to connect\x0d") && _recv_delim_lf()) {
+                debug_if(true, "AT^ ERROR: Failed to connect\r\n"); // betzw - TODO: `true` only for debug!
+            } else {
+                debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+            }
+            break;
+        default:
+            debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+            break;
+    }
 
     return false;
 }
@@ -933,11 +956,13 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
     nsapi_wifi_ap_t ap;
 
 #ifndef NDEBUG
-    /* trigger scan */
-    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
-        return false;
+    if(_dbg_on) {
+        /* trigger scan */
+        if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
+        {
+            debug_if(_dbg_on, "SPWF> error AT+S.SCAN\r\n");
+            return false;
+        }
     }
 #endif
 
