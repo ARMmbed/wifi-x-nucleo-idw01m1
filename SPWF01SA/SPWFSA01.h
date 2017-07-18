@@ -89,14 +89,14 @@ public:
      *  @return         Null-terminated representation of the local gateway
      *                  or null if no network mask has been recieved
      */
-    const char *getGateway();
+    const char *getGateway(void);
 
     /** Get the local network mask
      *
      *  @return         Null-terminated representation of the local network mask
      *                  or null if no network mask has been recieved
      */
-    const char *getNetmask();
+    const char *getNetmask(void);
 
     /**
      * Check if SPWFSA01 is connected
@@ -163,12 +163,12 @@ public:
     /**
      * Checks if data is available
      */
-    bool readable();
+    bool readable(void);
 
     /**
      * Checks if data can be written
      */
-    bool writeable();
+    bool writeable(void);
 
     /**
      * Attach a function to call whenever network state has changed
@@ -208,46 +208,47 @@ private:
         // data follows
     } *_packets, **_packets_end;
 
-    void _packet_handler_th();
-    void _execute_bottom_halves();
-    void _pending_data_handler();
-    void _network_lost_handler_th();
-    void _network_lost_handler_bh();
-    void _hard_fault_handler();
-    void _wifi_hwfault_handler();
-    void _event_handler();
-    void _sock_closed_handler();
-    void _wait_console_active();
+    void _packet_handler_th(void);
+    void _execute_bottom_halves(void);
+    void _pending_data_handler(void);
+    void _network_lost_handler_th(void);
+    void _network_lost_handler_bh(void);
+    void _hard_fault_handler(void);
+    void _wifi_hwfault_handler(void);
+    void _event_handler(void);
+    void _sock_closed_handler(void);
+    void _wait_console_active(void);
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);
-    bool _winds_off();
-    void _winds_on();
+    bool _winds_off(void);
+    void _winds_on(void);
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
     bool _read_in_packet(int spwf_id, int amount);
+    void _read_in_pending_winds(void);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
-    void _free_all_packets();
+    void _free_all_packets(void);
     bool _recv_ap(nsapi_wifi_ap_t *ap);
 
-    bool _recv_delim_lf() {
+    bool _recv_delim_lf(void) {
         return (_parser.getc() == '\x0a');
     }
 
-    bool _recv_delim_cr() {
+    bool _recv_delim_cr(void) {
         return (_parser.getc() == '\x0d');
     }
 
-    bool _recv_delim_cr_lf() {
+    bool _recv_delim_cr_lf(void) {
         return _recv_delim_cr() && _recv_delim_lf();
     }
 
-    bool _recv_ok() {
+    bool _recv_ok(void) {
         return _parser.recv("OK\x0d") && _recv_delim_lf();
     }
 
-    bool _is_data_pending() {
+    bool _is_data_pending(void) {
         if(_pending_sockets_bitmap != 0) return true;
         else return false;
     }
@@ -264,16 +265,16 @@ private:
         return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
     }
 
-    bool _is_event_callback_blocked() {
+    bool _is_event_callback_blocked(void) {
         return _call_event_callback_blocked;
     }
 
-    void _block_event_callback() {
+    void _block_event_callback(void) {
         MBED_ASSERT(!_call_event_callback_blocked);
         _call_event_callback_blocked = true;
     }
 
-    void _unblock_event_callback() {
+    void _unblock_event_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
     }
@@ -297,7 +298,7 @@ public:
         if((bool)enter_cb) enter_cb();
     }
 
-    ~BlockExecuter() {
+    ~BlockExecuter(void) {
         _exit_cb();
     }
 
