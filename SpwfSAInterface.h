@@ -16,7 +16,7 @@
 
 /**
   ******************************************************************************
-  * @file    SpwfInterface.h 
+  * @file    SpwfSAInterface.h
   * @author  STMicroelectronics
   * @brief   Header file of the NetworkStack for the SPWF Device
   ******************************************************************************

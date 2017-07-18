@@ -16,7 +16,7 @@
 
 /**
   ******************************************************************************
-  * @file    SpwfInterface.cpp 
+  * @file    SpwfSAInterface.cpp
   * @author  STMicroelectronics
   * @brief   Implementation of the NetworkStack for the SPWF Device
   ******************************************************************************
@@ -33,7 +33,7 @@
   ******************************************************************************
   */
 
-#include "SpwfInterface.h"
+#include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
 /**

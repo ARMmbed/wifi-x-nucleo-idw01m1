@@ -15,7 +15,7 @@
  */
 
 #include "SPWFSA01.h"
-#include "SpwfInterface.h"
+#include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
