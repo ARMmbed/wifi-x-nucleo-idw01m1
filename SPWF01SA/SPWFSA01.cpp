@@ -604,13 +604,13 @@ bool SPWFSA01::close(int spwf_id)
     bool ret = false;
 
     if(spwf_id == SPWFSA_SOCKET_COUNT) {
-        goto read_in_pending;
+        goto close_read_in_pending;
     }
 
     // Flush out pending data
     while(true) {
         int amount = _read_in_packet(spwf_id);
-        if(amount < 0) goto read_in_pending;
+        if(amount < 0) goto close_read_in_pending;
         if(amount == 0) break; // no more data to be read
     }
 
@@ -618,10 +618,10 @@ bool SPWFSA01::close(int spwf_id)
     if (_parser.send("AT+S.SOCKC=%d", spwf_id)
             && _recv_ok()) {
         ret = true;
-        goto read_in_pending;
+        goto close_read_in_pending;
     }
 
-read_in_pending:
+close_read_in_pending:
     /* first we need to handle a potential network loss */
     _network_lost_handler_bh();
 
@@ -735,22 +735,22 @@ void SPWFSA01::_network_lost_handler_bh(void)
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
                     debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
                     disconnect();
-                    goto get_out;
+                    goto nlh_get_out;
                 }
 
                 if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u\x0d",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                     debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
 
                     _associated_interface._connected_to_network = true;
-                    goto get_out;
+                    goto nlh_get_out;
                 }
             }
         } else {
             debug_if(true, "Leaving SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
-            goto get_out;
+            goto nlh_get_out;
         }
 
-        get_out:
+    nlh_get_out:
         debug_if(true, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n"); // betzw - TODO: `true` only for debug!
         _parser.setTimeout(_timeout);
 
@@ -847,8 +847,10 @@ void SPWFSA01::_sock_closed_handler(void)
     /* free packets for this socket */
     _free_packets(spwf_id);
 
+    /* only reset module id
+     * user must still explicitly close the socket
+     */
     internal_id = _associated_interface.get_internal_id(spwf_id);
-    _associated_interface._ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
     _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 }
 
@@ -908,7 +910,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         value = _parser.getc();
         if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
-            goto get_out;
+            goto recv_ap_get_out;
         }
 
         /* determine security */
@@ -916,32 +918,32 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             char buffer[10];
 
             if(!_parser.recv("%s ", &buffer)) {
-                goto get_out;
+                goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
-                goto get_out;
+                goto recv_ap_get_out;
             } else if(strncmp("PA2", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WPA2;
-                goto get_out;
+                goto recv_ap_get_out;
             } else if(strncmp("PA", buffer, 10) != 0) {
-                goto get_out;
+                goto recv_ap_get_out;
             }
 
             /* got a "WPA", check for "WPA2" */
             value = _parser.getc();
             if(value == '\x0d') { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
-                goto get_out;
+                goto recv_ap_get_out;
             } else { // assume "WPA2"
                 ap->security = NSAPI_SECURITY_WPA_WPA2;
-                goto get_out;
+                goto recv_ap_get_out;
             }
         }
     } else {
         debug("Should never happen!\r\n");
     }
 
-get_out:
+recv_ap_get_out:
     if(ret) {
         /* wait for next line feed */
         while(!_recv_delim_lf());
