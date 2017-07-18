@@ -30,7 +30,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
   _packets(0), _packets_end(&_packets)
 {
     _serial.baud(115200);
-    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
+    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler)); /* work around NETSOCKET's timeout bug */
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
@@ -652,6 +652,7 @@ void SPWFSA01::_pending_data_handler(void)
  * Buffered serial event handler
  *
  * Note: executed in IRQ context!
+ * Note: work around for NETSOCKET's timeout bug
  *
  */
 void SPWFSA01::_event_handler(void)
@@ -852,6 +853,10 @@ void SPWFSA01::_sock_closed_handler(void)
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
     _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+
+    /* work around NETSOCKET's timeout bug */
+    if((bool)_callback_func)
+        _callback_func();
 }
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)
