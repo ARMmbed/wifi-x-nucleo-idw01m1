@@ -36,13 +36,17 @@
 #ifndef SPWFSA_INTERFACE_H
 #define SPWFSA_INTERFACE_H
 
+#include <limits.h>
+
 #include "mbed.h"
 #include "SPWFSA01.h"
+
 
 /* Max number of sockets */
 #define SPWFSA_SOCKET_COUNT 8
 
 // Various timeouts for different SPWF operations
+#define SPWF_READ_BIN_TIMEOUT   (INT_MAX)
 #define SPWF_CONNECT_TIMEOUT    60000
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_INIT_TIMEOUT       6000

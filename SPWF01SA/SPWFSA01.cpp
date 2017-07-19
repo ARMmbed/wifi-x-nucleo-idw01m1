@@ -419,13 +419,29 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     _read_in_pending_winds();
 
     /* read in data */
-    if (_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)
-            && (_parser.read(buffer, amount) > 0)
-            && _recv_ok()) {
-        ret = amount;
+    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
+        /* set infinite timeout */
+        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+        /* read in binary data */
+        int read = _parser.read(buffer, amount);
+        /* reset timeout value */
+        _parser.setTimeout(_timeout);
+        if(read > 0) {
+            if(_recv_ok()) {
+                ret = amount;
+            } else {
+                debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+            }
+        } else {
+            debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+        }
+    } else {
+        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
     }
 
+    /* unblock asynchronous indications */
     _winds_on();
+
     return ret;
 }
 
@@ -565,7 +581,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                debug_if(_dbg_on, "\r\nRead Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -646,6 +662,11 @@ close_read_in_pending:
 void SPWFSA01::_pending_data_handler(void)
 {
     debug("\r\nwarning: SPWFSA01::_pending_data_handler(), %s\r\n", _recv_ok() ? "true" : "false");
+
+    /* work around NETSOCKET's timeout bug */
+    if((bool)_callback_func) {
+        _callback_func();
+    }
 }
 
 /*
@@ -657,8 +678,9 @@ void SPWFSA01::_pending_data_handler(void)
  */
 void SPWFSA01::_event_handler(void)
 {
-    if((bool)_callback_func && !_is_event_callback_blocked())
+    if((bool)_callback_func && !_is_event_callback_blocked()) {
         _callback_func();
+    }
 }
 
 /*
@@ -698,7 +720,7 @@ void SPWFSA01::_packet_handler_th(void)
     /* parse out the socket id & amount */
     if (!(_parser.recv(":%d:%d\x0d", &spwf_id, &amount) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
         return;
     }
@@ -719,7 +741,7 @@ void SPWFSA01::_network_lost_handler_bh(void)
 
     {
         bool were_connected;
-        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_and_callback),
                                      Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
         Timer timer;
         timer.start();
@@ -734,7 +756,7 @@ void SPWFSA01::_network_lost_handler_bh(void)
 
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                    debug_if(true, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
+                    debug_if(true, "\r\nSPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__); // betzw - TODO: `true` only for debug!
                     disconnect();
                     goto nlh_get_out;
                 }
@@ -785,11 +807,11 @@ void SPWFSA01::_hard_fault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 #else // NDEBUG
-    debug("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 
@@ -798,6 +820,11 @@ void SPWFSA01::_hard_fault_handler(void)
     _recover_from_hard_faults();
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
+
+    /* work around NETSOCKET's timeout bug */
+    if((bool)_callback_func) {
+        _callback_func();
+    }
 }
 
 /*
@@ -813,13 +840,18 @@ void SPWFSA01::_wifi_hwfault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    error("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    debug("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this WiFi radio failure
     _recover_from_hard_faults();
 #endif // NDEBUG
+
+    /* work around NETSOCKET's timeout bug */
+    if((bool)_callback_func) {
+        _callback_func();
+    }
 }
 
 /*
@@ -832,8 +864,13 @@ void SPWFSA01::_sock_closed_handler(void)
 
     if(!(_parser.recv(":%d\x0d", &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
+        /* work around NETSOCKET's timeout bug */
+        if((bool)_callback_func) {
+            _callback_func();
+        }
+
         return;
     }
 
@@ -855,8 +892,9 @@ void SPWFSA01::_sock_closed_handler(void)
     _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
 
     /* work around NETSOCKET's timeout bug */
-    if((bool)_callback_func)
+    if((bool)_callback_func) {
         _callback_func();
+    }
 }
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)

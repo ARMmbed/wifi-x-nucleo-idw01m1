@@ -289,6 +289,14 @@ private:
         _call_event_callback_blocked = false;
     }
 
+    /* work around NETSOCKET's timeout bug */
+    void _unblock_and_callback(void) {
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
+        if((bool)_callback_func)
+            _callback_func();
+    }
+
     char _ip_buffer[16];
     char _gateway_buffer[16];
     char _netmask_buffer[16];
