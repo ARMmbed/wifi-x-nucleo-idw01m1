@@ -344,8 +344,8 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         case 'E':
-            if(_parser.recv("RROR: Failed to connect\x0d") && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: Failed to connect\r\n"); // betzw - TODO: `true` only for debug!
+            if(_parser.recv("\x0d") && _recv_delim_lf()) {
+                debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
             } else {
                 debug_if(true, "SPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
             }
@@ -418,25 +418,30 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     /* read in pending indications */
     _read_in_pending_winds();
 
-    /* read in data */
-    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-        /* set infinite timeout */
-        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
-        /* read in binary data */
-        int read = _parser.read(buffer, amount);
-        /* reset timeout value */
-        _parser.setTimeout(_timeout);
-        if(read > 0) {
-            if(_recv_ok()) {
-                ret = amount;
+    /* check if `spwf_id` is still valid */
+    if(_associated_interface.get_internal_id(spwf_id) != SPWFSA_SOCKET_COUNT) {
+        /* read in data */
+        if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
+            /* set infinite timeout */
+            _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+            /* read in binary data */
+            int read = _parser.read(buffer, amount);
+            /* reset timeout value */
+            _parser.setTimeout(_timeout);
+            if(read > 0) {
+                if(_recv_ok()) {
+                    ret = amount;
+                } else {
+                    debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+                }
             } else {
-                debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+                debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
             }
         } else {
-            debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+            debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
         }
     } else {
-        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+        debug_if(true, "%s(%d): `spwf_id` has become invalid\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
     }
 
     /* unblock asynchronous indications */
@@ -876,6 +881,9 @@ void SPWFSA01::_sock_closed_handler(void)
 
     debug_if(true, "AT^ +WIND:58:Socket Closed:%d\r\n", spwf_id); // betzw - TODO: `true` only for debug!
 
+    /* check for the module to report a valid id */
+    MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
+
     /* clear pending data flag */
     /* betzw - NOTE / TODO: do we need to read in eventually pending data from the module?
      *                      Currently, assuming that this may NOT be the case!
@@ -889,7 +897,10 @@ void SPWFSA01::_sock_closed_handler(void)
      * user must still explicitly close the socket
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
-    _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+    _associated_interface._internal_ids[spwf_id] = SPWFSA_SOCKET_COUNT;
+    if(internal_id != SPWFSA_SOCKET_COUNT) {
+        _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+    }
 
     /* work around NETSOCKET's timeout bug */
     if((bool)_callback_func) {
