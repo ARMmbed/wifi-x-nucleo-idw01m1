@@ -16,7 +16,7 @@
 
 /**
   ******************************************************************************
-  * @file    SpwfInterface.cpp 
+  * @file    SpwfSAInterface.cpp
   * @author  STMicroelectronics
   * @brief   Implementation of the NetworkStack for the SPWF Device
   ******************************************************************************
@@ -33,7 +33,7 @@
   ******************************************************************************
   */
 
-#include "SpwfInterface.h"
+#include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
 /**
@@ -250,6 +250,9 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
+    /* check for the module to report a valid id */
+    MBED_ASSERT(((unsigned int)socket->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
+
     _internal_ids[socket->spwf_id] = socket->internal_id;
     socket->addr = addr;
     return NSAPI_ERROR_OK;
@@ -283,6 +286,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
+        _internal_ids[socket->spwf_id] = SPWFSA_SOCKET_COUNT;
     }
 
     _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
@@ -363,6 +367,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
+        _internal_ids[socket->spwf_id] = SPWFSA_SOCKET_COUNT;
         socket->spwf_id = SPWFSA_SOCKET_COUNT;
     }
 

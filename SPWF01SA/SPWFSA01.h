@@ -215,7 +215,6 @@ private:
     void _network_lost_handler_bh(void);
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
-    void _event_handler(void);
     void _sock_closed_handler(void);
     void _wait_console_active(void);
     int _read_in(char*, int, uint32_t);
@@ -265,23 +264,37 @@ private:
         return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
     }
 
+    void _packet_handler_bh(void) {
+        /* read in other eventually pending packages */
+        _read_in_pending();
+    }
+
+    /* work around NETSOCKET's timeout bug */
+    void _event_handler(void);
+
+    /* work around NETSOCKET's timeout bug */
     bool _is_event_callback_blocked(void) {
         return _call_event_callback_blocked;
     }
 
+    /* work around NETSOCKET's timeout bug */
     void _block_event_callback(void) {
         MBED_ASSERT(!_call_event_callback_blocked);
         _call_event_callback_blocked = true;
     }
 
+    /* work around NETSOCKET's timeout bug */
     void _unblock_event_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
     }
 
-    void _packet_handler_bh(void) {
-        /* read in other eventually pending packages */
-        _read_in_pending();
+    /* work around NETSOCKET's timeout bug */
+    void _unblock_and_callback(void) {
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
+        if((bool)_callback_func)
+            _callback_func();
     }
 
     char _ip_buffer[16];

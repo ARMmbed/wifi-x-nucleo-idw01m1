@@ -16,7 +16,7 @@
 
 /**
   ******************************************************************************
-  * @file    SpwfInterface.h 
+  * @file    SpwfSAInterface.h
   * @author  STMicroelectronics
   * @brief   Header file of the NetworkStack for the SPWF Device
   ******************************************************************************
@@ -36,13 +36,17 @@
 #ifndef SPWFSA_INTERFACE_H
 #define SPWFSA_INTERFACE_H
 
+#include <limits.h>
+
 #include "mbed.h"
 #include "SPWFSA01.h"
+
 
 /* Max number of sockets */
 #define SPWFSA_SOCKET_COUNT 8
 
 // Various timeouts for different SPWF operations
+#define SPWF_READ_BIN_TIMEOUT   (INT_MAX)
 #define SPWF_CONNECT_TIMEOUT    60000
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_INIT_TIMEOUT       6000
@@ -323,15 +327,22 @@ private:
     void event(void);
     nsapi_error_t init(void);
 
-    int get_internal_id(int spwf_id) {
-        return _internal_ids[spwf_id];
+    int get_internal_id(int spwf_id) { // checks also if `spwf_id` is still "valid"
+        MBED_ASSERT(spwf_id != SPWFSA_SOCKET_COUNT);
+
+        int internal_id = _internal_ids[spwf_id];
+        if((internal_id != SPWFSA_SOCKET_COUNT) && (_ids[internal_id].spwf_id == spwf_id)) {
+            return internal_id;
+        } else {
+            return SPWFSA_SOCKET_COUNT;
+        }
     }
 
     /* Called at initialization or after module hard fault */
     void inner_constructor() {
         memset(_ids, 0, sizeof(_ids));
         memset(_cbs, 0, sizeof(_cbs));
-        memset(_internal_ids, 0, sizeof(_internal_ids));
+        memset(_internal_ids, SPWFSA_SOCKET_COUNT, sizeof(_internal_ids));
 
         for (int internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
             _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
