@@ -46,9 +46,9 @@
 #define SPWFSA_SOCKET_COUNT 8
 
 // Various timeouts for different SPWF operations
-#define SPWF_READ_BIN_TIMEOUT   (INT_MAX)
 #define SPWF_CONNECT_TIMEOUT    60000
 #define SPWF_NETLOST_TIMEOUT    30000
+#define SPWF_READ_BIN_TIMEOUT   13000
 #define SPWF_INIT_TIMEOUT       6000
 #define SPWF_SCAN_TIMEOUT       3000
 #define SPWF_SENDTO_TIMEOUT     2001

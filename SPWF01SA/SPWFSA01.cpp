@@ -419,30 +419,25 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     /* read in pending indications */
     _read_in_pending_winds();
 
-    /* check if `spwf_id` is still valid */
-    if(_associated_interface.get_internal_id(spwf_id) != SPWFSA_SOCKET_COUNT) {
-        /* read in data */
-        if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-            /* set infinite timeout */
-            _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
-            /* read in binary data */
-            int read = _parser.read(buffer, amount);
-            /* reset timeout value */
-            _parser.setTimeout(_timeout);
-            if(read > 0) {
-                if(_recv_ok()) {
-                    ret = amount;
-                } else {
-                    debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
-                }
+    /* read in data */
+    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
+        /* set high timeout */
+        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+        /* read in binary data */
+        int read = _parser.read(buffer, amount);
+        /* reset timeout value */
+        _parser.setTimeout(_timeout);
+        if(read > 0) {
+            if(_recv_ok()) {
+                ret = amount;
             } else {
-                debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+                debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
             }
         } else {
-            debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+            debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
         }
     } else {
-        debug_if(true, "%s(%d): `spwf_id` has become invalid\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
     }
 
     /* unblock asynchronous indications */
@@ -508,8 +503,12 @@ void SPWFSA01::_read_in_pending(void) {
     }
 }
 
-/* Note: returns `false` only in case of "out of memory" */
-bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
+/* Note: returns
+ * '1'  in case of success
+ * '0'  in case of `_read_in()` error
+ * '-1' in case of "out of memory"
+ */
+int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
@@ -517,7 +516,7 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
 #else // NDEBUG
         debug("%s(%d): Out of memory!", __func__, __LINE__);
 #endif
-        return false; /* out of memory: give up here! */
+        return -1; /* out of memory: give up here! */
     }
 
     /* init packet */
@@ -528,6 +527,7 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     /* read data in */
     if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
         free(packet);
+        return 0;
     } else {
         /* append to packet list */
         *_packets_end = packet;
@@ -539,9 +539,14 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
         }
     }
 
-    return true;
+    return 1;
 }
 
+/* Note: returns
+ * '1'  in case of success
+ * '0'  in case of `_read_in()` error or zero `amount`
+ * '-1' in case of "out of memory"
+ */
 int SPWFSA01::_read_in_packet(int spwf_id) {
     int amount;
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
@@ -550,8 +555,9 @@ int SPWFSA01::_read_in_packet(int spwf_id) {
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
     if(amount > 0) {
-        if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
-            return -1;
+        int ret = _read_in_packet(spwf_id, (uint32_t)amount);
+        if(ret <= 0) { /* "out of memory" or `_read_in()` error */
+            return ret;
         }
     }
     return amount;
@@ -624,7 +630,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             int len;
 
             len = _read_in_packet(spwf_id);
-            if(len <= 0)  {
+            if(len <= 0)  { /* "out of memory" or `_read_in()` error */
                 return -1;
             }
         }
@@ -642,8 +648,8 @@ bool SPWFSA01::close(int spwf_id)
     // Flush out pending data
     while(true) {
         int amount = _read_in_packet(spwf_id);
-        if(amount < 0) goto close_read_in_pending;
-        if(amount == 0) break; // no more data to be read
+        if(amount < 0) goto close_read_in_pending; // out of memory
+        if(amount == 0) break; // no more data to be read or `_read_in()` error
     }
 
     // Close socket

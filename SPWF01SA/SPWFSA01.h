@@ -224,7 +224,7 @@ private:
     void _winds_on(void);
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
-    bool _read_in_packet(int spwf_id, int amount);
+    int _read_in_packet(int spwf_id, int amount);
     void _read_in_pending_winds(void);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
