@@ -34,7 +34,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
-    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_server_gone_handler);
     _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
@@ -419,30 +419,25 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     /* read in pending indications */
     _read_in_pending_winds();
 
-    /* check if `spwf_id` is still valid */
-    if(_associated_interface.get_internal_id(spwf_id) != SPWFSA_SOCKET_COUNT) {
-        /* read in data */
-        if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-            /* set infinite timeout */
-            _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
-            /* read in binary data */
-            int read = _parser.read(buffer, amount);
-            /* reset timeout value */
-            _parser.setTimeout(_timeout);
-            if(read > 0) {
-                if(_recv_ok()) {
-                    ret = amount;
-                } else {
-                    debug_if(_dbg_on, "%s(%d): failed to received OK\r\n", __func__, __LINE__);
-                }
+    /* read in data */
+    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
+        /* set high timeout */
+        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+        /* read in binary data */
+        int read = _parser.read(buffer, amount);
+        /* reset timeout value */
+        _parser.setTimeout(_timeout);
+        if(read > 0) {
+            if(_recv_ok()) {
+                ret = amount;
             } else {
-                debug_if(_dbg_on, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
+                debug_if(_dbg_on, "%s(%d): failed to received OK\r\n", __func__, __LINE__);
             }
         } else {
-            debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
+            debug_if(_dbg_on, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
         }
     } else {
-        debug_if(_dbg_on, "%s(%d): `spwf_id` has become invalid\r\n", __func__, __LINE__);
+        debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
     }
 
     /* unblock asynchronous indications */
@@ -489,27 +484,38 @@ void SPWFSA01::_execute_bottom_halves() {
 }
 
 void SPWFSA01::_read_in_pending(void) {
-    static int spwf_id_cnt = 0;
+    static int internal_id_cnt = 0;
 
     while(_is_data_pending()) {
-        if(_is_data_pending(spwf_id_cnt)) {
+        if(_associated_interface._socket_has_connected(internal_id_cnt)) {
+            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
+
+            if(_is_data_pending(spwf_id)) {
             int amount;
 
-            amount = _read_in_packet(spwf_id_cnt);
+                amount = _read_in_packet(spwf_id);
             if(amount < 0) {
                 return; /* out of memory */
             }
         }
 
-        if(!_is_data_pending(spwf_id_cnt)) {
-            spwf_id_cnt++;
-            spwf_id_cnt %= SPWFSA_SOCKET_COUNT;
+            if(!_is_data_pending(spwf_id)) {
+                internal_id_cnt++;
+                internal_id_cnt %= SPWFSA_SOCKET_COUNT;
+            }
+        } else {
+            internal_id_cnt++;
+            internal_id_cnt %= SPWFSA_SOCKET_COUNT;
         }
     }
 }
 
-/* Note: returns `false` only in case of "out of memory" */
-bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
+/* Note: returns
+ * '1'  in case of success
+ * '0'  in case of `_read_in()` error
+ * '-1' in case of "out of memory"
+ */
+int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
@@ -517,7 +523,7 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
 #else // NDEBUG
         debug("%s(%d): Out of memory!", __func__, __LINE__);
 #endif
-        return false; /* out of memory: give up here! */
+        return -1; /* out of memory: give up here! */
     }
 
     /* init packet */
@@ -528,6 +534,7 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
     /* read data in */
     if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
         free(packet);
+        return 0;
     } else {
         /* append to packet list */
         *_packets_end = packet;
@@ -539,9 +546,14 @@ bool SPWFSA01::_read_in_packet(int spwf_id, int amount) {
         }
     }
 
-    return true;
+    return 1;
 }
 
+/* Note: returns
+ * '>0'  in case of success, amount of read in data (in bytes)
+ * '0'   in case of `_read_in()` error no more data to be read
+ * '-1'  in case of "out of memory"
+ */
 int SPWFSA01::_read_in_packet(int spwf_id) {
     int amount;
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
@@ -550,8 +562,9 @@ int SPWFSA01::_read_in_packet(int spwf_id) {
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
     if(amount > 0) {
-        if(!_read_in_packet(spwf_id, (uint32_t)amount)) { /* out of memory */
-            return -1;
+        int ret = _read_in_packet(spwf_id, (uint32_t)amount);
+        if(ret <= 0) { /* "out of memory" or `_read_in()` error */
+            return ret;
         }
     }
     return amount;
@@ -597,7 +610,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\n Read Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                debug_if(_dbg_on, "\r\nRead Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -624,7 +637,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             int len;
 
             len = _read_in_packet(spwf_id);
-            if(len <= 0)  {
+            if(len <= 0)  { /* "out of memory", `_read_in()` error, or no more data to be read */
                 return -1;
             }
         }
@@ -642,8 +655,8 @@ bool SPWFSA01::close(int spwf_id)
     // Flush out pending data
     while(true) {
         int amount = _read_in_packet(spwf_id);
-        if(amount < 0) goto close_read_in_pending;
-        if(amount == 0) break; // no more data to be read
+        if(amount < 0) goto close_read_in_pending; // out of memory
+        if(amount == 0) break; // no more data to be read or `_read_in()` error
     }
 
     // Close socket
@@ -662,7 +675,7 @@ close_read_in_pending:
 
     if(ret) {
         /* clear pending data flag */
-        _clear_pending_data(spwf_id); // betzw: should be redundant.
+        _clear_pending_data(spwf_id);
 
         /* free packets for this socket */
         _free_packets(spwf_id);
@@ -736,7 +749,7 @@ void SPWFSA01::_packet_handler_th(void)
     /* parse out the socket id & amount */
     if (!(_parser.recv(":%d:%d\x0d", &spwf_id, &amount) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
         return;
     }
@@ -823,11 +836,11 @@ void SPWFSA01::_hard_fault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 #else // NDEBUG
-    debug("\r\n SPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
+    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
           console_nr,
           reg0, reg1, reg2, reg3, reg12);
 
@@ -856,9 +869,9 @@ void SPWFSA01::_wifi_hwfault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    error("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\n SPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    debug("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this WiFi radio failure
     _recover_from_hard_faults();
@@ -873,14 +886,17 @@ void SPWFSA01::_wifi_hwfault_handler(void)
 /*
  * Handling oob ("+WIND:58:Socket Closed")
  * when server closes a client connection
+ *
+ * NOTE: When a socket client receives an indication about socket server gone (only for TCP sockets, WIND:58),
+ *       the socket connection is NOT automatically closed!
  */
-void SPWFSA01::_sock_closed_handler(void)
+void SPWFSA01::_server_gone_handler(void)
 {
     int spwf_id, internal_id;
 
     if(!(_parser.recv(":%d\x0d", &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\n SPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
         /* work around NETSOCKET's timeout bug */
         if((bool)_callback_func) {
@@ -895,22 +911,12 @@ void SPWFSA01::_sock_closed_handler(void)
     /* check for the module to report a valid id */
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
-    /* clear pending data flag */
-    /* betzw - NOTE / TODO: do we need to read in eventually pending data from the module?
-     *                      Currently, assuming that this may NOT be the case!
-     */
-    _clear_pending_data(spwf_id);
-
-    /* free packets for this socket */
-    _free_packets(spwf_id);
-
-    /* only reset module id
-     * user must still explicitly close the socket
+    /* only set `server_gone`
+     * user still can receive date & must still explicitly close the socket
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
-    _associated_interface._internal_ids[spwf_id] = SPWFSA_SOCKET_COUNT;
     if(internal_id != SPWFSA_SOCKET_COUNT) {
-        _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+        _associated_interface._ids[internal_id].server_gone = true;
     }
 }
 

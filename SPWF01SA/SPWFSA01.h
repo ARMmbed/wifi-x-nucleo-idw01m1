@@ -215,7 +215,7 @@ private:
     void _network_lost_handler_bh(void);
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
-    void _sock_closed_handler(void);
+    void _server_gone_handler(void);
     void _wait_console_active(void);
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
@@ -224,7 +224,7 @@ private:
     void _winds_on(void);
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
-    bool _read_in_packet(int spwf_id, int amount);
+    int _read_in_packet(int spwf_id, int amount);
     void _read_in_pending_winds(void);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
