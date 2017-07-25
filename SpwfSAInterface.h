@@ -301,9 +301,52 @@ private:
     typedef struct spwf_socket {
         int8_t internal_id;
         int spwf_id;
+        bool server_gone;
+        bool no_more_data;
         nsapi_protocol_t proto;
         SocketAddress addr;
     } spwf_socket_t;
+
+    static bool _socket_is_open(spwf_socket_t *sock) {
+        return (sock->internal_id != SPWFSA_SOCKET_COUNT);
+    }
+
+    static bool _socket_has_connected(spwf_socket_t *sock) {
+        return (_socket_is_open(sock) && (sock->spwf_id != SPWFSA_SOCKET_COUNT));
+    }
+
+    bool _socket_is_still_connected(spwf_socket_t *sock) {
+        return (_socket_has_connected(sock) && !sock->server_gone);
+    }
+
+    bool _socket_might_have_data(spwf_socket_t *sock) {
+        return (_socket_has_connected(sock) && !sock->no_more_data);
+    }
+
+    bool _socket_is_open(int internal_id) {
+        return (internal_id != SPWFSA_SOCKET_COUNT);
+    }
+
+    bool _socket_has_connected(int internal_id) {
+        if(!_socket_is_open(internal_id)) return false;
+
+        spwf_socket_t &sock = _ids[internal_id];
+        return (sock.spwf_id != SPWFSA_SOCKET_COUNT);
+    }
+
+    bool _socket_is_still_connected(int internal_id) {
+        if(!_socket_has_connected(internal_id)) return false;
+
+        spwf_socket_t &sock = _ids[internal_id];
+        return (!sock.server_gone);
+    }
+
+    bool _socket_might_have_data(int internal_id) {
+        if(!_socket_is_still_connected(internal_id)) return false;
+
+        spwf_socket_t &sock = _ids[internal_id];
+        return (!sock.no_more_data);
+    }
 
     SPWFSA01 _spwf;
 
@@ -331,7 +374,7 @@ private:
         MBED_ASSERT(spwf_id != SPWFSA_SOCKET_COUNT);
 
         int internal_id = _internal_ids[spwf_id];
-        if((internal_id != SPWFSA_SOCKET_COUNT) && (_ids[internal_id].spwf_id == spwf_id)) {
+        if((_socket_is_open(internal_id)) && (_ids[internal_id].spwf_id == spwf_id)) {
             return internal_id;
         } else {
             return SPWFSA_SOCKET_COUNT;

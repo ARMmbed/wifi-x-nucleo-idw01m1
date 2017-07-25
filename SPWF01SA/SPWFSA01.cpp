@@ -34,7 +34,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
-    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_sock_closed_handler);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_server_gone_handler);
     _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
@@ -484,21 +484,28 @@ void SPWFSA01::_execute_bottom_halves() {
 }
 
 void SPWFSA01::_read_in_pending(void) {
-    static int spwf_id_cnt = 0;
+    static int internal_id_cnt = 0;
 
     while(_is_data_pending()) {
-        if(_is_data_pending(spwf_id_cnt)) {
-            int amount;
+        if(_associated_interface._socket_has_connected(internal_id_cnt)) {
+            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
 
-            amount = _read_in_packet(spwf_id_cnt);
-            if(amount < 0) {
-                return; /* out of memory */
+            if(_is_data_pending(spwf_id)) {
+                int amount;
+
+                amount = _read_in_packet(spwf_id);
+                if(amount < 0) {
+                    return; /* out of memory */
+                }
             }
-        }
 
-        if(!_is_data_pending(spwf_id_cnt)) {
-            spwf_id_cnt++;
-            spwf_id_cnt %= SPWFSA_SOCKET_COUNT;
+            if(!_is_data_pending(spwf_id)) {
+                internal_id_cnt++;
+                internal_id_cnt %= SPWFSA_SOCKET_COUNT;
+            }
+        } else {
+            internal_id_cnt++;
+            internal_id_cnt %= SPWFSA_SOCKET_COUNT;
         }
     }
 }
@@ -543,9 +550,9 @@ int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
 }
 
 /* Note: returns
- * '1'  in case of success
- * '0'  in case of `_read_in()` error or zero `amount`
- * '-1' in case of "out of memory"
+ * '>0'  in case of success, amount of read in data (in bytes)
+ * '0'   in case of `_read_in()` error no more data to be read
+ * '-1'  in case of "out of memory"
  */
 int SPWFSA01::_read_in_packet(int spwf_id) {
     int amount;
@@ -630,7 +637,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
             int len;
 
             len = _read_in_packet(spwf_id);
-            if(len <= 0)  { /* "out of memory" or `_read_in()` error */
+            if(len <= 0)  { /* "out of memory", `_read_in()` error, or no more data to be read */
                 return -1;
             }
         }
@@ -668,7 +675,7 @@ close_read_in_pending:
 
     if(ret) {
         /* clear pending data flag */
-        _clear_pending_data(spwf_id); // betzw: should be redundant.
+        _clear_pending_data(spwf_id);
 
         /* free packets for this socket */
         _free_packets(spwf_id);
@@ -879,8 +886,11 @@ void SPWFSA01::_wifi_hwfault_handler(void)
 /*
  * Handling oob ("+WIND:58:Socket Closed")
  * when server closes a client connection
+ *
+ * NOTE: When a socket client receives an indication about socket server gone (only for TCP sockets, WIND:58),
+ *       the socket connection is NOT automatically closed!
  */
-void SPWFSA01::_sock_closed_handler(void)
+void SPWFSA01::_server_gone_handler(void)
 {
     int spwf_id, internal_id;
 
@@ -901,22 +911,12 @@ void SPWFSA01::_sock_closed_handler(void)
     /* check for the module to report a valid id */
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
-    /* clear pending data flag */
-    /* betzw - NOTE / TODO: do we need to read in eventually pending data from the module?
-     *                      Currently, assuming that this may NOT be the case!
-     */
-    _clear_pending_data(spwf_id);
-
-    /* free packets for this socket */
-    _free_packets(spwf_id);
-
-    /* only reset module id
-     * user must still explicitly close the socket
+    /* only set `server_gone`
+     * user still can receive date & must still explicitly close the socket
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
-    _associated_interface._internal_ids[spwf_id] = SPWFSA_SOCKET_COUNT;
     if(internal_id != SPWFSA_SOCKET_COUNT) {
-        _associated_interface._ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+        _associated_interface._ids[internal_id].server_gone = true;
     }
 }
 
