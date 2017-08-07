@@ -19,7 +19,7 @@
 #include "mbed_debug.h"
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\x0d", "\x0a"),
+: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\x0a", "\x0d"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
