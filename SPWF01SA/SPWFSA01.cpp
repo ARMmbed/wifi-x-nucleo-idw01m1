@@ -431,7 +431,7 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
             if(_recv_ok()) {
                 ret = amount;
             } else {
-                debug_if(true, "%s(%d): failed to received OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
+                debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
             }
         } else {
             debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__); // betzw - TODO: `true` only for debug!
