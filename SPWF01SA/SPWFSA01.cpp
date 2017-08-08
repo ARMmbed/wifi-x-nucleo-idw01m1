@@ -234,7 +234,7 @@ const char *SPWFSA01::getIPAddress(void)
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.GCFG=ip_ipaddr")
+    if (!(_parser.send("AT+S.STS=ip_ipaddr")
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> getIPAddress error\r\n");
@@ -247,11 +247,11 @@ const char *SPWFSA01::getIPAddress(void)
     return _ip_buffer;
 }
 
-const char *SPWFSA01::getGateway()
+const char *SPWFSA01::getGateway(void)
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.GCFG=ip_gw")
+    if (!(_parser.send("AT+S.STS=ip_gw")
             && _parser.recv("#  ip_gw = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> getGateway error\r\n");
@@ -264,11 +264,11 @@ const char *SPWFSA01::getGateway()
     return _gateway_buffer;
 }
 
-const char *SPWFSA01::getNetmask()
+const char *SPWFSA01::getNetmask(void)
 {
     unsigned int n1, n2, n3, n4;
 
-    if (!(_parser.send("AT+S.GCFG=ip_netmask")
+    if (!(_parser.send("AT+S.STS=ip_netmask")
             && _parser.recv("#  ip_netmask = %u.%u.%u.%u\x0d", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> getNetmask error\r\n");
@@ -449,14 +449,14 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
 #define WINDS_OFF "0xFFFFFFFF"
 #define WINDS_ON  "0x00000000"
 
-void SPWFSA01::_winds_on() {
+void SPWFSA01::_winds_on(void) {
     _parser.send("AT+S.SCFG=wind_off_high," WINDS_ON) && _recv_ok();
     _parser.send("AT+S.SCFG=wind_off_medium," WINDS_ON) && _recv_ok();
     _parser.send("AT+S.SCFG=wind_off_low," WINDS_ON) && _recv_ok();
 }
 
 /* Note: in case of error blocking has been (tried to be) lifted */
-bool SPWFSA01::_winds_off() {
+bool SPWFSA01::_winds_off(void) {
     if (!(_parser.send("AT+S.SCFG=wind_off_low," WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
@@ -478,7 +478,7 @@ bool SPWFSA01::_winds_off() {
     return true;
 }
 
-void SPWFSA01::_execute_bottom_halves() {
+void SPWFSA01::_execute_bottom_halves(void) {
     _network_lost_handler_bh();
     _packet_handler_bh();
 }
@@ -571,11 +571,6 @@ int SPWFSA01::_read_in_packet(int spwf_id) {
 }
 
 void SPWFSA01::_free_packets(int spwf_id) {
-    /* work around NETSOCKET's timeout bug */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
-
     // check if any packets are ready for `spwf_id`
     for(struct packet **p = &_packets; *p;) {
         if ((*p)->id == spwf_id) {
@@ -657,6 +652,9 @@ bool SPWFSA01::close(int spwf_id)
         int amount = _read_in_packet(spwf_id);
         if(amount < 0) goto close_read_in_pending; // out of memory
         if(amount == 0) break; // no more data to be read or `_read_in()` error
+
+        /* immediately free packet (to avoid "out of memory") */
+        _free_packets(spwf_id);
     }
 
     // Close socket
@@ -677,7 +675,7 @@ close_read_in_pending:
         /* clear pending data flag */
         _clear_pending_data(spwf_id);
 
-        /* free packets for this socket */
+        /* free packets for this socket (should be redundant) */
         _free_packets(spwf_id);
     }
 
@@ -814,6 +812,11 @@ void SPWFSA01::_recover_from_hard_faults(void) {
     disconnect();
     _associated_interface.inner_constructor();
     _free_all_packets();
+
+    /* work around NETSOCKET's timeout bug */
+    if((bool)_callback_func) {
+        _callback_func();
+    }
 }
 
 /*
@@ -1023,19 +1026,16 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
     unsigned cnt = 0;
     nsapi_wifi_ap_t ap;
 
-#ifndef NDEBUG
-    if(_dbg_on) {
-        /* trigger scan */
-        if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
-        {
-            debug_if(_dbg_on, "\r\nSPWF> error AT+S.SCAN\r\n");
-            return false;
-        }
-    }
-#endif
-
     if (!_parser.send("AT+S.SCAN")) {
         return NSAPI_ERROR_DEVICE_ERROR;
+    }
+
+    if(!_associated_interface._connected_to_network) {
+        if(!(_parser.recv("+WIND:32:WiFi Hardware Started") && _recv_delim_cr_lf())) {
+            return 0;
+        } else {
+            debug_if(true, "AT^ +WIND:32:WiFi Hardware Started\r\n"); // betzw - TODO: `true` only for debug!
+        }
     }
 
     while (_recv_ap(&ap)) {
