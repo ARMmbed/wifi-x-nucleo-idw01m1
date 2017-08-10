@@ -69,17 +69,10 @@ nsapi_error_t SpwfSAInterface::init(void)
     else return NSAPI_ERROR_DEVICE_ERROR;
 }
 
-nsapi_error_t SpwfSAInterface::connect()
+nsapi_error_t SpwfSAInterface::connect(void)
 {
     int mode;
     char *pass_phrase = ap_pass;
-
-    //initialize the device before connecting
-    if(!_isInitialized)
-    {
-        if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
-        _isInitialized=true;
-    }
 
     switch(ap_sec)
     {
@@ -104,6 +97,13 @@ nsapi_error_t SpwfSAInterface::connect()
         if(!disconnect()) {
             return NSAPI_ERROR_DEVICE_ERROR;
         }
+    }
+
+    //initialize the device before connecting
+    if(!_isInitialized)
+    {
+        if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
+        _isInitialized=true;
     }
 
     // Then: (re-)connect
@@ -146,10 +146,8 @@ nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi
  * @param  none
  * @retval NSAPI Error Type
  */
-nsapi_error_t SpwfSAInterface::disconnect()
+nsapi_error_t SpwfSAInterface::disconnect(void)
 {
-    CHECK_NOT_CONNECTED_ERR();
-
     _spwf.setTimeout(SPWF_DISCONNECT_TIMEOUT);
 
     if (!_spwf.disconnect()) {
@@ -157,6 +155,8 @@ nsapi_error_t SpwfSAInterface::disconnect()
     }
 
     _connected_to_network = false;
+    _isInitialized = false;
+
     return NSAPI_ERROR_OK;
 }
 
@@ -166,7 +166,7 @@ nsapi_error_t SpwfSAInterface::disconnect()
  * @retval Null-terminated representation of the local IP address
  *         or null if not yet connected
  */
-const char *SpwfSAInterface::get_ip_address()
+const char *SpwfSAInterface::get_ip_address(void)
 {
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getIPAddress();
@@ -178,13 +178,13 @@ const char *SpwfSAInterface::get_ip_address()
  * @retval Null-terminated representation of the MAC address
  *         or null if not yet connected
  */
-const char *SpwfSAInterface::get_mac_address()
+const char *SpwfSAInterface::get_mac_address(void)
 {
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getMACAddress();
 }
 
-const char *SpwfSAInterface::get_gateway()
+const char *SpwfSAInterface::get_gateway(void)
 {
     if(!_connected_to_network) return NULL;
 
@@ -192,7 +192,7 @@ const char *SpwfSAInterface::get_gateway()
     return _spwf.getGateway();
 }
 
-const char *SpwfSAInterface::get_netmask()
+const char *SpwfSAInterface::get_netmask(void)
 {
     if(!_connected_to_network) return NULL;
 
@@ -455,15 +455,33 @@ nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
-int8_t SpwfSAInterface::get_rssi()
+int8_t SpwfSAInterface::get_rssi(void)
 {
-    return 0;  // betzw - TODO: not yet supported!
+    if(!_connected_to_network) return 0;
+
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    return _spwf.getRssi();
 }
 
-nsapi_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
+nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
-    if(!_isInitialized) return NSAPI_ERROR_DEVICE_ERROR;
+    nsapi_size_or_error_t ret;
+
+    //initialize the device before scanning
+    if(!_isInitialized)
+    {
+        if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
+    }
 
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
-    return _spwf.scan(res, count);
+    ret = _spwf.scan(res, count);
+
+    //de-initialize the device sfter scanning
+    if(!_isInitialized)
+    {
+        nsapi_error_t err = disconnect();
+        if(err != NSAPI_ERROR_OK) return err;
+    }
+
+    return ret;
 }

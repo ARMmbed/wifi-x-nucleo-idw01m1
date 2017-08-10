@@ -98,6 +98,12 @@ public:
      */
     const char *getNetmask(void);
 
+    /** Gets the current radio signal strength for active connection
+     *
+     * @return          Connection strength in dBm (negative value)
+     */
+    int8_t getRssi();
+
     /**
      * Check if SPWFSA01 is connected
      *
