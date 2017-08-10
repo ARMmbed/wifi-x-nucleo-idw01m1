@@ -281,6 +281,20 @@ const char *SPWFSA01::getNetmask(void)
     return _netmask_buffer;
 }
 
+int8_t SPWFSA01::getRssi(void)
+{
+    int ret;
+
+    if (!(_parser.send("AT+S.PEERS=0,rx_rssi")
+            && _parser.recv("#  0.rx_rssi = %d\x0d", &ret)
+            && _recv_ok())) {
+        debug_if(true, "\r\nSPWF> getRssi error\r\n"); // betzw - TODO: `true` only for debug!
+        return 0;
+    }
+
+    return (int8_t)ret;
+}
+
 const char *SPWFSA01::getMACAddress(void)
 {
     unsigned int n1, n2, n3, n4, n5, n6;

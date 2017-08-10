@@ -457,7 +457,10 @@ nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 
 int8_t SpwfSAInterface::get_rssi(void)
 {
-    return 0;  // betzw - TODO: not yet supported!
+    if(!_connected_to_network) return 0;
+
+    _spwf.setTimeout(SPWF_MISC_TIMEOUT);
+    return _spwf.getRssi();
 }
 
 nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
