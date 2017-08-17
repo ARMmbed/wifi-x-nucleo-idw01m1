@@ -108,7 +108,7 @@ public:
 
     /** Set the WiFi network channel - NOT SUPPORTED
      *
-     * This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
+     *  This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
      *
      *  @param channel   Channel on which the connection is to be made, or 0 for any (Default: 0)
      *  @return          Not supported, returns NSAPI_ERROR_UNSUPPORTED
@@ -202,18 +202,24 @@ protected:
      */
     virtual nsapi_error_t socket_close(void *handle);
 
-    /** Bind a server socket to a specific port
+    /** Bind a server socket to a specific port - NOT SUPPORTED
+     *
+     *  This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
+     *
      *  @param handle       Socket handle
      *  @param address      Local address to listen for incoming connections on
-     *  @return             0 on success, negative on failure.
+     *  @return             Not supported, returns NSAPI_ERROR_UNSUPPORTED
      */
     virtual nsapi_error_t socket_bind(void *handle, const SocketAddress &address);
 
-    /** Start listening for incoming connections
+    /** Start listening for incoming connectionst - NOT SUPPORTED
+     *
+     *  This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
+     *
      *  @param handle       Socket handle
      *  @param backlog      Number of pending connections that can be queued up at any
      *                      one time [Default: 1]
-     *  @return             0 on success, negative on failure
+     *  @return             Not supported, returns NSAPI_ERROR_UNSUPPORTED
      */
     virtual nsapi_error_t socket_listen(void *handle, int backlog);
 
@@ -224,12 +230,13 @@ protected:
      */
     virtual nsapi_error_t socket_connect(void *handle, const SocketAddress &address);
 
-    /** Accept a new connection.
+    /** Accept a new connection - NOT SUPPORTED
+     *
+     *  This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
+     *
      *  @param handle       Handle in which to store new socket
      *  @param server       Socket handle to server to accept from
-     *  @return             0 on success, negative on failure
-     *  @note This call is not-blocking, if this call would block, must
-     *        immediately return NSAPI_ERROR_WOULD_WAIT
+     *  @return             Not supported, returns NSAPI_ERROR_UNSUPPORTED
      */
     virtual nsapi_error_t socket_accept(void *handle, void **socket, SocketAddress *address);
 

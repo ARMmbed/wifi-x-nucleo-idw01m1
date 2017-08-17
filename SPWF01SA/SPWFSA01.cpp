@@ -92,6 +92,48 @@ bool SPWFSA01::startup(int mode)
         return false;
     }
 
+    if (!(_parser.send("AT+S.GCFG=console1_enabled")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=console1_speed")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=console1_hwfc")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=console1_delimiter")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=console1_errs")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=sleep_enabled")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
+        return 0;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=standby_enabled")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
+        return 0;
+    }
+
     /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
