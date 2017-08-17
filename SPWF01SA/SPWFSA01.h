@@ -250,7 +250,7 @@ private:
     }
 
     bool _recv_ok(void) {
-        return _parser.recv("OK\x0d") && _recv_delim_lf();
+        return _parser.recv("OK%*[\x0d]") && _recv_delim_lf();
     }
 
     bool _is_data_pending(void) {
