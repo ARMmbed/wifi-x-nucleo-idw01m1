@@ -420,17 +420,20 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
     bool ret = true;
-    BH_HANDLER;
 
     for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
-        if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
-                && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
-                && _recv_ok())) {
-            // betzw - TODO: handle different errors more accurately!
-            ret = false;
-            break;
+        {
+            BH_HANDLER;
+
+            if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
+                    && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
+                    && _recv_ok())) {
+                // betzw - TODO: handle different errors more accurately!
+                ret = false;
+                break;
+            }
         }
 
         sent += to_send;
