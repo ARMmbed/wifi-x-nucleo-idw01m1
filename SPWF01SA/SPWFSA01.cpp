@@ -448,17 +448,6 @@ int SPWFSA01::_read_len(int spwf_id) {
     return (int)amount;
 }
 
-void SPWFSA01::_read_in_pending_winds(void) {
-    /* set immediate timeout */
-    _parser.setTimeout(0);
-
-    /* Read all pending indications (by receiving anything) */
-    while(readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
-
-    /* reset timeout value */
-    _parser.setTimeout(_timeout);
-}
-
 int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     int ret = -1;
 
@@ -468,9 +457,6 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     if(!_winds_off()) {
         return -1;
     }
-
-    /* read in pending indications */
-    _read_in_pending_winds();
 
     /* read in data */
     if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
