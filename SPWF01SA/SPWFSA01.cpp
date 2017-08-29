@@ -18,8 +18,12 @@
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
+#define SPWFSA01_TX_MULTIPLE (1)
+#define SPWFSA01_RXBUFFER_SZ (730U)
+#define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
+
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, 2*1024, 2), _parser(_serial, "\x0a", "\x0d"),
+: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, "\x0a", "\x0d"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
@@ -95,43 +99,43 @@ bool SPWFSA01::startup(int mode)
     if (!(_parser.send("AT+S.GCFG=console1_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_speed")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_hwfc")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_delimiter")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_errs")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
-        return 0;
+        return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
-        return 0;
+        return false;
     }
 
     /* display the current values of all the status variables (only for debug) */
@@ -230,15 +234,6 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
             debug_if(true, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4); // betzw - TODO: `true` only for debug!
             break;
         }
-
-#ifndef NDEBUG
-    /* trigger scan */
-    if(!(_parser.send("AT+S.SCAN") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.SCAN\r\n");
-        return false;
-    }
-#endif
 
     return true;
 }
@@ -415,15 +410,14 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     return false;
 }
 
-#define SPWFSA01_MAX_WRITE 4096U // betzw - WAS: 4096U // betzw - TRIAL: 64U
 bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : amount;
+    for(to_send = (amount > SPWFSA01_TXBUFFER_SZ) ? SPWFSA01_TXBUFFER_SZ : amount;
             sent < amount;
-            to_send = ((amount - sent) > SPWFSA01_MAX_WRITE) ? SPWFSA01_MAX_WRITE : (amount - sent)) {
+            to_send = ((amount - sent) > SPWFSA01_TXBUFFER_SZ) ? SPWFSA01_TXBUFFER_SZ : (amount - sent)) {
         {
             BH_HANDLER;
 
@@ -459,7 +453,7 @@ void SPWFSA01::_read_in_pending_winds(void) {
     _parser.setTimeout(0);
 
     /* Read all pending indications (by receiving anything) */
-    while(_serial.readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
+    while(readable()) _parser.recv("@"); // Note: "@" is just a non-empty placeholder
 
     /* reset timeout value */
     _parser.setTimeout(_timeout);
@@ -986,16 +980,6 @@ void SPWFSA01::setTimeout(uint32_t timeout_ms)
 {
     _timeout = timeout_ms;
     _parser.setTimeout(timeout_ms);
-}
-
-bool SPWFSA01::readable(void)
-{
-    return _serial.readable();
-}
-
-bool SPWFSA01::writeable(void)
-{
-    return _serial.writeable();
 }
 
 void SPWFSA01::attach(Callback<void()> func)

@@ -169,12 +169,16 @@ public:
     /**
      * Checks if data is available
      */
-    bool readable(void);
+    bool readable(void) {
+        return _serial.readable();
+    }
 
     /**
      * Checks if data can be written
      */
-    bool writeable(void);
+    bool writeable(void) {
+        return _serial.writeable();
+    }
 
     /**
      * Attach a function to call whenever network state has changed
