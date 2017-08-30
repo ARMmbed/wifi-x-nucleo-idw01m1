@@ -169,12 +169,16 @@ public:
     /**
      * Checks if data is available
      */
-    bool readable(void);
+    bool readable(void) {
+        return _serial.readable();
+    }
 
     /**
      * Checks if data can be written
      */
-    bool writeable(void);
+    bool writeable(void) {
+        return _serial.writeable();
+    }
 
     /**
      * Attach a function to call whenever network state has changed
@@ -231,7 +235,6 @@ private:
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
     int _read_in_packet(int spwf_id, int amount);
-    void _read_in_pending_winds(void);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
