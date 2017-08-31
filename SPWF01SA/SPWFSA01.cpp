@@ -22,9 +22,10 @@
 #define SPWFSA01_RXBUFFER_SZ (730U)
 #define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
 
-SPWFSA01::SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug)
+SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, "\x0a", "\x0d"),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
+  _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
   _call_event_callback_blocked(false),
   _pending_sockets_bitmap(0),
@@ -84,6 +85,34 @@ bool SPWFSA01::startup(int mode)
         debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
         return false;
     }
+
+#if !DEVICE_SERIAL_FC
+    /*disable HW flow control*/
+    if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+        return false;
+    }
+#else
+    if((_rts != NC) && (_cts != NC)) {
+        /*enable HW flow control*/
+        if(!(_parser.send("AT+S.SCFG=console1_hwfc,1") && _recv_ok()))
+        {
+            debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
+            return false;
+        }
+
+        /*configure pins for HW flow control*/
+        _serial.set_flow_control(SerialBase::RTSCTS, _rts, _cts);
+    } else {
+        /*disable HW flow control*/
+        if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+        {
+            debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+            return false;
+        }
+    }
+#endif
 
     /* sw reset */
     reset();

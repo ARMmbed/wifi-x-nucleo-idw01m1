@@ -27,7 +27,7 @@ class SpwfSAInterface;
 class SPWFSA01
 {
 public:
-    SPWFSA01(PinName tx, PinName rx, SpwfSAInterface &ifce, bool debug=false);
+    SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
 
     /**
      * Init the SPWFSA01
@@ -203,6 +203,8 @@ private:
     ATParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
+    PinName _rts;
+    PinName _cts;
     int _timeout;
     bool _dbg_on;
     bool _call_event_callback_blocked;
