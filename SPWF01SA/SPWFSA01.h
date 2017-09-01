@@ -228,7 +228,7 @@ private:
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
     void _server_gone_handler(void);
-    void _wait_console_active(void);
+    void _wait_wifi_hw_started(void);
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);

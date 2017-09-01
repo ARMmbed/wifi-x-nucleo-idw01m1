@@ -178,10 +178,10 @@ bool SPWFSA01::startup(int mode)
     return true;
 }
 
-void SPWFSA01::_wait_console_active(void) {
+void SPWFSA01::_wait_wifi_hw_started(void) {
     while(true) {
-        if (_parser.recv("+WIND:0:Console active%*[\x0d]") && _recv_delim_lf()) {
-            debug_if(true, "AT^ +WIND:0:Console active\r\n"); // betzw - TODO: `true` only for debug!
+        if (_parser.recv("+WIND:32:WiFi Hardware Started%*[\x0d]") && _recv_delim_lf()) {
+            debug_if(true, "AT^ +WIND:32:WiFi Hardware Started\r\n"); // betzw - TODO: `true` only for debug!
             return;
         }
     }
@@ -194,7 +194,7 @@ bool SPWFSA01::hw_reset(void)
     wait_ms(200);
     _reset.write(1); 
 
-    _wait_console_active();
+    _wait_wifi_hw_started();
     return true;
 }
 
@@ -212,7 +212,7 @@ bool SPWFSA01::reset(void)
                                                                    eventual closing of sockets via "WIND" asynchronous
                                                                    indications! So everything regarding the clean-up
                                                                    of these situations is handled there. */
-    _wait_console_active();
+    _wait_wifi_hw_started();
     return true;
 }
 
@@ -1017,6 +1017,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     /* run to 'horizontal tab' */
     while(_parser.getc() != '\x09');
 
+
     /* read in next line */
     ret = _parser.recv(" BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
@@ -1086,14 +1087,6 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
 
     if (!_parser.send("AT+S.SCAN")) {
         return NSAPI_ERROR_DEVICE_ERROR;
-    }
-
-    if(!_associated_interface._connected_to_network) {
-        if(!(_parser.recv("+WIND:32:WiFi Hardware Started") && _recv_delim_cr_lf())) {
-            return 0;
-        } else {
-            debug_if(true, "AT^ +WIND:32:WiFi Hardware Started\r\n"); // betzw - TODO: `true` only for debug!
-        }
     }
 
     while (_recv_ap(&ap)) {

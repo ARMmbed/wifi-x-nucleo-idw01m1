@@ -475,7 +475,7 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
     ret = _spwf.scan(res, count);
 
-    //de-initialize the device sfter scanning
+    //de-initialize the device after scanning
     if(!_isInitialized)
     {
         nsapi_error_t err = disconnect();
