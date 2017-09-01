@@ -40,14 +40,13 @@
  * @brief  SpwfSAInterface constructor
  * @param  tx: Pin USART TX
  *         rx: Pin USART RX
- *         rst: reset pin for Spwf module
- *         wkup: reset pin for Spwf module
  *         rts: Pin USART RTS
+ *         cts: Pin USART RTS
  *         debug : not used
  * @retval none
  */
-SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, bool debug)
-: _spwf(tx, rx, *this, debug),
+SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, PinName rts, PinName cts, bool debug)
+: _spwf(tx, rx, rts, cts, *this, debug),
   _dbg_on(debug)
 {
     inner_constructor();
@@ -476,7 +475,7 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
     ret = _spwf.scan(res, count);
 
-    //de-initialize the device sfter scanning
+    //de-initialize the device after scanning
     if(!_isInitialized)
     {
         nsapi_error_t err = disconnect();

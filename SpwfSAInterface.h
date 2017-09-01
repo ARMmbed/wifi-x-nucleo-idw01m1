@@ -70,9 +70,11 @@ public:
     /** SpwfSAInterface constructor
      * @param tx        TX pin
      * @param rx        RX pin
+     * @param rts       RTS pin
+     * @param cts       CTS pin
      * @param debug     Enable debugging
      */
-    SpwfSAInterface(PinName tx, PinName rx, bool debug = false);
+    SpwfSAInterface(PinName tx, PinName rx, PinName rts = NC, PinName cts = NC, bool debug = false);
 
     /** Start the interface
      *
