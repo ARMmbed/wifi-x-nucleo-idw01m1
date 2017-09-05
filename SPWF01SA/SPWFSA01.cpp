@@ -181,7 +181,7 @@ bool SPWFSA01::startup(int mode)
 void SPWFSA01::_wait_wifi_hw_started(void) {
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started%*[\x0d]") && _recv_delim_lf()) {
-            debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n"); // betzw - TODO: `true` only for debug!
+            debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
             return;
         }
     }
