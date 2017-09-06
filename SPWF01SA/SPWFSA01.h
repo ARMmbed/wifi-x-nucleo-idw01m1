@@ -207,10 +207,12 @@ private:
     PinName _cts;
     int _timeout;
     bool _dbg_on;
-    bool _call_event_callback_blocked;
     int _pending_sockets_bitmap;
     bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
+
+    /* call (external) callback only while not receiving */
+    bool _call_event_callback_blocked;
     Callback<void()> _callback_func;
 
     struct packet {
@@ -280,27 +282,23 @@ private:
         _read_in_pending();
     }
 
-    /* work around NETSOCKET's timeout bug */
+    /* call (external) callback only while not receiving */
     void _event_handler(void);
 
-    /* work around NETSOCKET's timeout bug */
     bool _is_event_callback_blocked(void) {
         return _call_event_callback_blocked;
     }
 
-    /* work around NETSOCKET's timeout bug */
     void _block_event_callback(void) {
         MBED_ASSERT(!_call_event_callback_blocked);
         _call_event_callback_blocked = true;
     }
 
-    /* work around NETSOCKET's timeout bug */
     void _unblock_event_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
     }
 
-    /* work around NETSOCKET's timeout bug */
     void _unblock_and_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;

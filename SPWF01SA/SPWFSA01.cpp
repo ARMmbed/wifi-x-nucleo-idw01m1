@@ -27,15 +27,15 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
-  _call_event_callback_blocked(false),
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
+  _call_event_callback_blocked(false),
   _callback_func(),
   _packets(0), _packets_end(&_packets)
 {
     _serial.baud(115200);
-    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler)); /* work around NETSOCKET's timeout bug */
+    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
     _parser.debugOn(debug);
 
     _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
@@ -608,7 +608,7 @@ int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
         *_packets_end = packet;
         _packets_end = &packet->next;
 
-        /* work around NETSOCKET's timeout bug */
+        /* call (external) callback only while not receiving */
         if((bool)_callback_func) {
             _callback_func();
         }
@@ -625,7 +625,7 @@ int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
 int SPWFSA01::_read_in_packet(int spwf_id) {
     int amount;
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* call (external) callback only while not receiving */
 
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
@@ -758,7 +758,7 @@ void SPWFSA01::_pending_data_handler(void)
 {
     debug("\r\nwarning: SPWFSA01::_pending_data_handler(), %s\r\n", _recv_ok() ? "true" : "false");
 
-    /* work around NETSOCKET's timeout bug */
+    /* call (external) callback only while not receiving */
     if((bool)_callback_func) {
         _callback_func();
     }
@@ -768,7 +768,7 @@ void SPWFSA01::_pending_data_handler(void)
  * Buffered serial event handler
  *
  * Note: executed in IRQ context!
- * Note: work around for NETSOCKET's timeout bug
+ * Note: call (external) callback only while not receiving
  *
  */
 void SPWFSA01::_event_handler(void)
@@ -837,7 +837,7 @@ void SPWFSA01::_network_lost_handler_bh(void)
     {
         bool were_connected;
         BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_and_callback),
-                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* work around NETSOCKET's timeout bug */
+                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* call (external) callback only while not receiving */
         Timer timer;
         timer.start();
 
@@ -881,7 +881,7 @@ void SPWFSA01::_recover_from_hard_faults(void) {
     _associated_interface.inner_constructor();
     _free_all_packets();
 
-    /* work around NETSOCKET's timeout bug */
+    /* call (external) callback only while not receiving */
     if((bool)_callback_func) {
         _callback_func();
     }
@@ -921,7 +921,7 @@ void SPWFSA01::_hard_fault_handler(void)
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
 
-    /* work around NETSOCKET's timeout bug */
+    /* call (external) callback only while not receiving */
     if((bool)_callback_func) {
         _callback_func();
     }
@@ -948,7 +948,7 @@ void SPWFSA01::_wifi_hwfault_handler(void)
     _recover_from_hard_faults();
 #endif // NDEBUG
 
-    /* work around NETSOCKET's timeout bug */
+    /* call (external) callback only while not receiving */
     if((bool)_callback_func) {
         _callback_func();
     }
@@ -969,7 +969,7 @@ void SPWFSA01::_server_gone_handler(void)
 #ifndef NDEBUG
         error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
-        /* work around NETSOCKET's timeout bug */
+        /* call (external) callback only while not receiving */
         if((bool)_callback_func) {
             _callback_func();
         }
@@ -999,7 +999,7 @@ void SPWFSA01::setTimeout(uint32_t timeout_ms)
 
 void SPWFSA01::attach(Callback<void()> func)
 {
-    _callback_func = func;
+    _callback_func = func; /* call (external) callback only while not receiving */
 }
 
 bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
