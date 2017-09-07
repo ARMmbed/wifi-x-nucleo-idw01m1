@@ -969,12 +969,7 @@ void SPWFSA01::_server_gone_handler(void)
 #ifndef NDEBUG
         error("\r\nSPWFSA01::%s failed!\r\n", __func__);
 #endif
-        /* call (external) callback only while not receiving */
-        if((bool)_callback_func) {
-            _callback_func();
-        }
-
-        return;
+        goto _get_out;
     }
 
     debug_if(true, "AT^ +WIND:58:Socket Closed:%d\r\n", spwf_id); // betzw - TODO: `true` only for debug!
@@ -988,6 +983,12 @@ void SPWFSA01::_server_gone_handler(void)
     internal_id = _associated_interface.get_internal_id(spwf_id);
     if(internal_id != SPWFSA_SOCKET_COUNT) {
         _associated_interface._ids[internal_id].server_gone = true;
+    }
+
+_get_out:
+    /* call (external) callback only while not receiving */
+    if((bool)_callback_func) {
+        _callback_func();
     }
 }
 
