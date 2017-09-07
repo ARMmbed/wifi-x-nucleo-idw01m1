@@ -297,13 +297,23 @@ private:
     void _unblock_event_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
+        _trigger_event_callback();
     }
 
     void _unblock_and_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
-        if((bool)_callback_func)
+        if((bool)_callback_func) {
             _callback_func();
+        }
+    }
+
+    void _trigger_event_callback(void) {
+        MBED_ASSERT(!_call_event_callback_blocked);
+        /* if still data available */
+        if(readable() && ((bool)_callback_func)) {
+            _callback_func();
+        }
     }
 
     char _ip_buffer[16];
