@@ -328,7 +328,7 @@ nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsig
  * @param  handle: Pointer to handle
  *         data: pointer to data
  *         size: size of data
- * @retval no of bytes read or -1 in case of error
+ * @retval no of bytes read or negative error code in case of error
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
@@ -343,6 +343,9 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, uns
     _spwf.setTimeout(SPWF_RECV_TIMEOUT);
 
     int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size);
+
+    MBED_ASSERT(recv != 0);
+
     if (recv < 0) {
         if(!_socket_is_still_connected(socket)) {
             socket->no_more_data = true;
