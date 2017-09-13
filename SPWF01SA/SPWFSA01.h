@@ -225,6 +225,9 @@ private:
     void _packet_handler_th(void);
     void _execute_bottom_halves(void);
     void _pending_data_handler(void);
+    void _command_not_found(void);
+    void _data_mode_not_available(void);
+    void _unrecognized_key(void);
     void _network_lost_handler_th(void);
     void _network_lost_handler_bh(void);
     void _hard_fault_handler(void);
@@ -285,6 +288,14 @@ private:
     /* call (external) callback only while not receiving */
     void _event_handler(void);
 
+    void _error_handler(const char* err_str);
+
+    void _call_callback(void) {
+        if((bool)_callback_func) {
+            _callback_func();
+        }
+    }
+
     bool _is_event_callback_blocked(void) {
         return _call_event_callback_blocked;
     }
@@ -300,19 +311,19 @@ private:
         _trigger_event_callback();
     }
 
+    /* unblock & force call of (external) callback */
     void _unblock_and_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked);
         _call_event_callback_blocked = false;
-        if((bool)_callback_func) {
-            _callback_func();
-        }
+        _call_callback();
     }
 
+    /* trigger call of (external) callback in case there is still data */
     void _trigger_event_callback(void) {
         MBED_ASSERT(!_call_event_callback_blocked);
         /* if still data available */
-        if(readable() && ((bool)_callback_func)) {
-            _callback_func();
+        if(readable()) {
+            _call_callback();
         }
     }
 
