@@ -44,6 +44,9 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
     _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
+    _parser.oob("ERROR: Command not found", this, &SPWFSA01::_command_not_found);
+    _parser.oob("ERROR: Data mode not available", this, &SPWFSA01::_data_mode_not_available);
+    _parser.oob("ERROR: Unrecognized key", this, &SPWFSA01::_unrecognized_key);
 }
 
 bool SPWFSA01::startup(int mode)
@@ -608,10 +611,8 @@ int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
         *_packets_end = packet;
         _packets_end = &packet->next;
 
-        /* call (external) callback only while not receiving */
-        if((bool)_callback_func) {
-            _callback_func();
-        }
+        /* force call of (external) callback */
+        _call_callback();
     }
 
     return 1;
@@ -661,9 +662,7 @@ void SPWFSA01::_free_all_packets() {
 }
 
 /**
- *
  *	Recv Function
- *
  */
 int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 {
@@ -751,36 +750,64 @@ close_read_in_pending:
 }
 
 /*
- * Handling oob ("ERROR: Pending data")
- *
- */
-void SPWFSA01::_pending_data_handler(void)
-{
-    debug("\r\nwarning: SPWFSA01::_pending_data_handler(), %s\r\n", _recv_ok() ? "true" : "false");
-
-    /* call (external) callback only while not receiving */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
-}
-
-/*
  * Buffered serial event handler
  *
  * Note: executed in IRQ context!
  * Note: call (external) callback only while not receiving
- *
  */
 void SPWFSA01::_event_handler(void)
 {
-    if((bool)_callback_func && !_is_event_callback_blocked()) {
-        _callback_func();
+    if(!_is_event_callback_blocked()) {
+        _call_callback();
     }
 }
 
 /*
+ * Common error handler
+ */
+void SPWFSA01::_error_handler(const char* err_str)
+{
+    debug_if(_dbg_on, "AT^ ERROR: %s\r\n=>\tCR_LF: %s\r\n", err_str,
+             _recv_delim_cr_lf() ? "true" : "false");
+
+    /* force call of (external) callback */
+    _call_callback();
+}
+
+/*
+ * Handling oob ("ERROR: Pending data")
+ */
+void SPWFSA01::_pending_data_handler(void)
+{
+    _error_handler("Pending data");
+}
+
+/*
+ * Handling oob ("ERROR: Command not found")
+ */
+void SPWFSA01::_command_not_found(void)
+{
+    _error_handler("Command not found");
+}
+
+/*
+ * Handling oob ("ERROR: Data mode not available")
+ */
+void SPWFSA01::_data_mode_not_available(void)
+{
+    _error_handler("Data mode not available");
+}
+
+/*
+ * Handling oob ("ERROR: Unrecognized key")
+ */
+void SPWFSA01::_unrecognized_key(void)
+{
+    _error_handler("Unrecognized key");
+}
+
+/*
  * Handling oob ("+WIND:33:WiFi Network Lost")
- *
  */
 void SPWFSA01::_network_lost_handler_th(void)
 {
@@ -805,7 +832,6 @@ void SPWFSA01::_network_lost_handler_th(void)
 
 /*
  * Handling oob ("+WIND:55:Pending Data")
- *
  */
 void SPWFSA01::_packet_handler_th(void)
 {
@@ -881,15 +907,12 @@ void SPWFSA01::_recover_from_hard_faults(void) {
     _associated_interface.inner_constructor();
     _free_all_packets();
 
-    /* call (external) callback only while not receiving */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
+    /* force call of (external) callback */
+    _call_callback();
 }
 
 /*
  * Handling oob ("+WIND:8:Hard Fault")
- *
  */
 void SPWFSA01::_hard_fault_handler(void)
 {
@@ -921,15 +944,12 @@ void SPWFSA01::_hard_fault_handler(void)
     _parser.setTimeout(_timeout);
 #endif // NDEBUG
 
-    /* call (external) callback only while not receiving */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
+    /* force call of (external) callback */
+    _call_callback();
 }
 
 /*
  * Handling oob ("+WIND:5:WiFi Hardware Failure")
- *
  */
 void SPWFSA01::_wifi_hwfault_handler(void)
 {
@@ -948,10 +968,8 @@ void SPWFSA01::_wifi_hwfault_handler(void)
     _recover_from_hard_faults();
 #endif // NDEBUG
 
-    /* call (external) callback only while not receiving */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
+    /* force call of (external) callback */
+    _call_callback();
 }
 
 /*
@@ -986,10 +1004,8 @@ void SPWFSA01::_server_gone_handler(void)
     }
 
 _get_out:
-    /* call (external) callback only while not receiving */
-    if((bool)_callback_func) {
-        _callback_func();
-    }
+    /* force call of (external) callback */
+    _call_callback();
 }
 
 void SPWFSA01::setTimeout(uint32_t timeout_ms)
