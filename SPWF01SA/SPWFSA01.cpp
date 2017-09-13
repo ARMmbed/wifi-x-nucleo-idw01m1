@@ -1062,7 +1062,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s ", &buffer)) {
+            if(!_parser.recv("%s%*[\x20]", &buffer)) {
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
