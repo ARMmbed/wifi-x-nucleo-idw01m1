@@ -47,6 +47,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
     _parser.oob("ERROR: Command not found", this, &SPWFSA01::_command_not_found);
     _parser.oob("ERROR: Data mode not available", this, &SPWFSA01::_data_mode_not_available);
     _parser.oob("ERROR: Unrecognized key", this, &SPWFSA01::_unrecognized_key);
+    _parser.oob("ERROR: Illegal Socket ID", this, &SPWFSA01::_illegal_socket_id);
 }
 
 bool SPWFSA01::startup(int mode)
@@ -807,6 +808,14 @@ void SPWFSA01::_unrecognized_key(void)
 }
 
 /*
+ * Handling oob ("ERROR: Illegal Socket ID")
+ */
+void SPWFSA01::_illegal_socket_id(void)
+{
+    _error_handler("Illegal Socket ID");
+}
+
+/*
  * Handling oob ("+WIND:33:WiFi Network Lost")
  */
 void SPWFSA01::_network_lost_handler_th(void)
@@ -1061,7 +1070,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s ", &buffer)) {
+            if(!_parser.recv("%s%*[\x20]", &buffer)) {
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;

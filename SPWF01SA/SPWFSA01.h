@@ -228,6 +228,7 @@ private:
     void _command_not_found(void);
     void _data_mode_not_available(void);
     void _unrecognized_key(void);
+    void _illegal_socket_id(void);
     void _network_lost_handler_th(void);
     void _network_lost_handler_bh(void);
     void _hard_fault_handler(void);
