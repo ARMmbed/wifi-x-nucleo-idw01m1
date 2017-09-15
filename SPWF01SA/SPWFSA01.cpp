@@ -22,8 +22,11 @@
 #define SPWFSA01_RXBUFFER_SZ (730U)
 #define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
 
+static const char recv_delim[] = {SPWFSA01::_lf_, '\0'};
+static const char send_delim[] = {SPWFSA01::_cr_, '\0'};
+
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, "\x0a", "\x0d"),
+: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
@@ -43,11 +46,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
     _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
-    _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
-    _parser.oob("ERROR: Command not found", this, &SPWFSA01::_command_not_found);
-    _parser.oob("ERROR: Data mode not available", this, &SPWFSA01::_data_mode_not_available);
-    _parser.oob("ERROR: Unrecognized key", this, &SPWFSA01::_unrecognized_key);
-    _parser.oob("ERROR: Illegal Socket ID", this, &SPWFSA01::_illegal_socket_id);
+    _parser.oob("ERROR:", this, &SPWFSA01::_error_handler);
 }
 
 bool SPWFSA01::startup(int mode)
@@ -407,7 +406,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     /* wait for first character */
     while((value = _parser.getc()) < 0);
 
-    if(value != '\x0d') { // Note: this is different to what the spec exactly says
+    if(value != _cr_) { // Note: this is different to what the spec exactly says
         debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
         return false;
     }
@@ -766,53 +765,21 @@ void SPWFSA01::_event_handler(void)
 /*
  * Common error handler
  */
-void SPWFSA01::_error_handler(const char* err_str)
+void SPWFSA01::_error_handler(void)
 {
-    debug_if(_dbg_on, "AT^ ERROR: %s\r\n=>\tCR_LF: %s\r\n", err_str,
-             _recv_delim_cr_lf() ? "true" : "false");
+    char err_str[64];
+    char curr_char;
+    int pos = 0;
+
+    while((curr_char = _parser.getc()) != _lf_) {
+        err_str[pos++] = curr_char;
+    }
+    err_str[pos] = '\0';
+
+    debug_if(_dbg_on, "AT^ ERROR: %s", err_str);
 
     /* force call of (external) callback */
     _call_callback();
-}
-
-/*
- * Handling oob ("ERROR: Pending data")
- */
-void SPWFSA01::_pending_data_handler(void)
-{
-    _error_handler("Pending data");
-}
-
-/*
- * Handling oob ("ERROR: Command not found")
- */
-void SPWFSA01::_command_not_found(void)
-{
-    _error_handler("Command not found");
-}
-
-/*
- * Handling oob ("ERROR: Data mode not available")
- */
-void SPWFSA01::_data_mode_not_available(void)
-{
-    _error_handler("Data mode not available");
-}
-
-/*
- * Handling oob ("ERROR: Unrecognized key")
- */
-void SPWFSA01::_unrecognized_key(void)
-{
-    _error_handler("Unrecognized key");
-}
-
-/*
- * Handling oob ("ERROR: Illegal Socket ID")
- */
-void SPWFSA01::_illegal_socket_id(void)
-{
-    _error_handler("Illegal Socket ID");
 }
 
 /*
@@ -1084,7 +1051,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
             /* got a "WPA", check for "WPA2" */
             value = _parser.getc();
-            if(value == '\x0d') { // no further protocol
+            if(value == _cr_) { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
                 goto recv_ap_get_out;
             } else { // assume "WPA2"
