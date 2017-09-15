@@ -429,7 +429,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             break;
         case 'E':
             if(_parser.recv("RROR: %[^\x0d]%*[\x0d]", err_msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: %s\r\n", err_msg_buffer); // betzw - TODO: `true` only for debug!
+                debug_if(true, "AT^ ERROR: %s (%d)\r\n", err_msg_buffer, __LINE__); // betzw - TODO: `true` only for debug!
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
             }
@@ -767,16 +767,11 @@ void SPWFSA01::_event_handler(void)
  */
 void SPWFSA01::_error_handler(void)
 {
-    char err_str[64];
-    char curr_char;
-    int pos = 0;
-
-    while((curr_char = _parser.getc()) != _lf_) {
-        err_str[pos++] = curr_char;
+    if(_parser.recv(" %[^\x0d]%*[\x0d]", err_msg_buffer) && _recv_delim_lf()) {
+        debug_if(true, "AT^ ERROR: %s (%d)\r\n", err_msg_buffer, __LINE__); // betzw - TODO: `true` only for debug!
+    } else {
+        debug_if(true, "\r\nSPWF> Unknown ERROR string in SPWFSA01::_error_handler (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
     }
-    err_str[pos] = '\0';
-
-    debug_if(true, "AT^ ERROR: %s", err_str);  // betzw - TODO: `true` only for debug!
 
     /* force call of (external) callback */
     _call_callback();
