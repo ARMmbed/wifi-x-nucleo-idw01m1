@@ -227,11 +227,6 @@ private:
 
     void _packet_handler_th(void);
     void _execute_bottom_halves(void);
-    void _pending_data_handler(void);
-    void _command_not_found(void);
-    void _data_mode_not_available(void);
-    void _unrecognized_key(void);
-    void _illegal_socket_id(void);
     void _network_lost_handler_th(void);
     void _network_lost_handler_bh(void);
     void _hard_fault_handler(void);
@@ -292,7 +287,7 @@ private:
     /* call (external) callback only while not receiving */
     void _event_handler(void);
 
-    void _error_handler(const char* err_str);
+    void _error_handler(void);
 
     void _call_callback(void) {
         if((bool)_callback_func) {

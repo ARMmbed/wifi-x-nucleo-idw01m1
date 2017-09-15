@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <string>
-
 #include "SPWFSA01.h"
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
@@ -48,11 +46,7 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
     _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
     _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
     _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
-    _parser.oob("ERROR: Pending data", this, &SPWFSA01::_pending_data_handler);
-    _parser.oob("ERROR: Command not found", this, &SPWFSA01::_command_not_found);
-    _parser.oob("ERROR: Data mode not available", this, &SPWFSA01::_data_mode_not_available);
-    _parser.oob("ERROR: Unrecognized key", this, &SPWFSA01::_unrecognized_key);
-    _parser.oob("ERROR: Illegal Socket ID", this, &SPWFSA01::_illegal_socket_id);
+    _parser.oob("ERROR:", this, &SPWFSA01::_error_handler);
 }
 
 bool SPWFSA01::startup(int mode)
@@ -771,53 +765,21 @@ void SPWFSA01::_event_handler(void)
 /*
  * Common error handler
  */
-void SPWFSA01::_error_handler(const char* err_str)
+void SPWFSA01::_error_handler(void)
 {
-    debug_if(true, "AT^ ERROR: %s\r\n=>\tCR_LF: %s\r\n", err_str,
-             _recv_delim_cr_lf() ? "true" : "false");  // betzw - TODO: `true` only for debug!
+    char err_str[64];
+    char curr_char;
+    int pos = 0;
+
+    while((curr_char = _parser.getc()) != _lf_) {
+        err_str[pos++] = curr_char;
+    }
+    err_str[pos] = '\0';
+
+    debug_if(true, "AT^ ERROR: %s", err_str);  // betzw - TODO: `true` only for debug!
 
     /* force call of (external) callback */
     _call_callback();
-}
-
-/*
- * Handling oob ("ERROR: Pending data")
- */
-void SPWFSA01::_pending_data_handler(void)
-{
-    _error_handler("Pending data");
-}
-
-/*
- * Handling oob ("ERROR: Command not found")
- */
-void SPWFSA01::_command_not_found(void)
-{
-    _error_handler("Command not found");
-}
-
-/*
- * Handling oob ("ERROR: Data mode not available")
- */
-void SPWFSA01::_data_mode_not_available(void)
-{
-    _error_handler("Data mode not available");
-}
-
-/*
- * Handling oob ("ERROR: Unrecognized key")
- */
-void SPWFSA01::_unrecognized_key(void)
-{
-    _error_handler("Unrecognized key");
-}
-
-/*
- * Handling oob ("ERROR: Illegal Socket ID")
- */
-void SPWFSA01::_illegal_socket_id(void)
-{
-    _error_handler("Illegal Socket ID");
 }
 
 /*
