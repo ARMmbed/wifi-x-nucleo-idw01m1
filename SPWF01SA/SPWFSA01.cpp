@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <string>
+
 #include "SPWFSA01.h"
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
@@ -22,8 +24,11 @@
 #define SPWFSA01_RXBUFFER_SZ (730U)
 #define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
 
+static const char recv_delim[] = {SPWFSA01::_lf_, '\0'};
+static const char send_delim[] = {SPWFSA01::_cr_, '\0'};
+
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, "\x0a", "\x0d"),
+: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
   _wakeup(PC_8, 1), _reset(PC_12, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
@@ -407,7 +412,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     /* wait for first character */
     while((value = _parser.getc()) < 0);
 
-    if(value != '\x0d') { // Note: this is different to what the spec exactly says
+    if(value != _cr_) { // Note: this is different to what the spec exactly says
         debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__); // betzw - TODO: `true` only for debug!
         return false;
     }
@@ -1085,7 +1090,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
             /* got a "WPA", check for "WPA2" */
             value = _parser.getc();
-            if(value == '\x0d') { // no further protocol
+            if(value == _cr_) { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
                 goto recv_ap_get_out;
             } else { // assume "WPA2"

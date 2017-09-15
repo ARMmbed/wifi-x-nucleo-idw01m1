@@ -198,6 +198,9 @@ public:
         attach(Callback<void()>(obj, method));
     }
 
+    static const char _cr_ = '\x0d'; // '\r' carriage return
+    static const char _lf_ = '\x0a'; // '\n' line feed
+
 private:
     BufferedSerial _serial;
     ATParser _parser;
@@ -249,11 +252,11 @@ private:
     bool _recv_ap(nsapi_wifi_ap_t *ap);
 
     bool _recv_delim_lf(void) {
-        return (_parser.getc() == '\x0a');
+        return (_parser.getc() == _lf_);
     }
 
     bool _recv_delim_cr(void) {
-        return (_parser.getc() == '\x0d');
+        return (_parser.getc() == _cr_);
     }
 
     bool _recv_delim_cr_lf(void) {
