@@ -706,18 +706,21 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
     }
 }
 
+#define CLOSE_MAX_RETRY (3)
 bool SPWFSA01::close(int spwf_id)
 {
     bool ret = false;
+    int retry_cnt = 0;
 
     if(spwf_id == SPWFSA_SOCKET_COUNT) {
-        goto close_read_in_pending;
+        goto close_bh_handling;
     }
 
+close_flush:
     // Flush out pending data
     while(true) {
         int amount = _read_in_packet(spwf_id);
-        if(amount < 0) goto close_read_in_pending; // out of memory
+        if(amount < 0) goto close_bh_handling; // out of memory
         if(amount == 0) break; // no more data to be read or `_read_in()` error
 
         /* immediately free packet (to avoid "out of memory") */
@@ -728,15 +731,16 @@ bool SPWFSA01::close(int spwf_id)
     if (_parser.send("AT+S.SOCKC=%d", spwf_id)
             && _recv_ok()) {
         ret = true;
-        goto close_read_in_pending;
+        goto close_bh_handling;
+    } else {
+        if(retry_cnt++ < CLOSE_MAX_RETRY) {
+            goto close_flush;
+        }
     }
 
-close_read_in_pending:
-    /* first we need to handle a potential network loss */
-    _network_lost_handler_bh();
-
-    /* handle bottom halve of packet handler (include `_read_in_pending()`) */
-    _packet_handler_bh();
+close_bh_handling:
+    /* anticipate bottom halves */
+    _execute_bottom_halves();
 
     if(ret) {
         /* clear pending data flag */
