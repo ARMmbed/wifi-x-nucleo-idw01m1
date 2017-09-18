@@ -725,6 +725,9 @@ close_flush:
 
         /* immediately free packet (to avoid "out of memory") */
         _free_packets(spwf_id);
+
+        /* interleave bottom halves */
+        _execute_bottom_halves();
     }
 
     // Close socket
@@ -734,6 +737,10 @@ close_flush:
         goto close_bh_handling;
     } else {
         if(retry_cnt++ < CLOSE_MAX_RETRY) {
+            /* interleave bottom halves */
+            _execute_bottom_halves();
+
+            /* retry flushing */
             goto close_flush;
         }
     }
@@ -743,10 +750,10 @@ close_bh_handling:
     _execute_bottom_halves();
 
     if(ret) {
-        /* clear pending data flag */
+        /* clear pending data flag (should be redundant) */
         _clear_pending_data(spwf_id);
 
-        /* free packets for this socket (should be redundant) */
+        /* free packets for this socket */
         _free_packets(spwf_id);
     }
 
