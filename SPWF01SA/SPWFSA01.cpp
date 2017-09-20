@@ -173,7 +173,7 @@ bool SPWFSA01::startup(int mode)
     /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT&V\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.STS\r\n");
         return false;
     }
 #endif
@@ -1001,6 +1001,7 @@ void SPWFSA01::attach(Callback<void()> func)
     _callback_func = func; /* call (external) callback only while not receiving */
 }
 
+static char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
 bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 {
     bool ret;
@@ -1018,18 +1019,20 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
 
     /* read in next line */
-    ret = _parser.recv(" BSS %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%32[^\']\' CAPS:",
+    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
-                       &channel, &ap->rssi, &ap->ssid);
+                       &channel, &ap->rssi, ssid_buf);
 
     if(ret) {
         int value;
 
         /* copy values */
+        memcpy(&ap->ssid, ssid_buf, 32);
+        ap->ssid[32] = '\0';
         ap->channel = channel;
 
         /* skip 'CAPS' */
-        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 "
+        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 ")
             _parser.getc();
         }
 
@@ -1067,7 +1070,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             }
         }
     } else {
-        debug("Should never happen!\r\n");
+        debug("%s - ERROR: Should never happen!\r\n", __func__);
     }
 
 recv_ap_get_out:
