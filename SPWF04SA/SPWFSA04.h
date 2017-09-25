@@ -14,34 +14,34 @@
  * limitations under the License.
  */
  
-#ifndef SPWFSA01_H
-#define SPWFSA01_H
+#ifndef SPWFSA04_H
+#define SPWFSA04_H
 
 #include "ATParser.h"
 #include "BlockExecuter.h"
 
 class SpwfSAInterface;
 
-/** SPWFSA01 Interface class.
-    This is an interface to a SPWFSA01 module.
+/** SPWFSA04 Interface class.
+    This is an interface to a SPWFSA04 module.
  */
-class SPWFSA01
+class SPWFSA04
 {
 public:
-    SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
+    SPWFSA04(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
 
     /**
-     * Init the SPWFSA01
+     * Init the SPWFSA04
      *
      * @param mode mode in which to startup
-     * @return true only if SPWFSA01 has started up correctly
+     * @return true only if SPWFSA04 has started up correctly
      */
     bool startup(int mode);
 
     /**
-     * Reset SPWFSA01
+     * Reset SPWFSA04
      *
-     * @return true only if SPWFSA01 resets successfully
+     * @return true only if SPWFSA04 resets successfully
      */
     bool hw_reset(void);
     bool reset(void);
@@ -50,36 +50,36 @@ public:
      * Enable/Disable DHCP
      *
      * @param mode mode of DHCP 2-softAP, 1-on, 0-off
-     * @return true only if SPWFSA01 enables/disables DHCP successfully
+     * @return true only if SPWFSA04 enables/disables DHCP successfully
      */
     bool dhcp(int mode);
 
     /**
-     * Connect SPWFSA01 to AP
+     * Connect SPWFSA04 to AP
      *
      * @param ap the name of the AP
      * @param passPhrase the password of AP
      * @param securityMode the security mode of AP (WPA/WPA2, WEP, Open)
-     * @return true only if SPWFSA01 is connected successfully
+     * @return true only if SPWFSA04 is connected successfully
      */
     bool connect(const char *ap, const char *passPhrase, int securityMode);
 
     /**
-     * Disconnect SPWFSA01 from AP
+     * Disconnect SPWFSA04 from AP
      *
-     * @return true only if SPWFSA01 is disconnected successfully
+     * @return true only if SPWFSA04 is disconnected successfully
      */
     bool disconnect(void);
 
     /**
-     * Get the IP address of SPWFSA01
+     * Get the IP address of SPWFSA04
      *
      * @return null-teriminated IP address or null if no IP address is assigned
      */
     const char *getIPAddress(void);
 
     /**
-     * Get the MAC address of SPWFSA01
+     * Get the MAC address of SPWFSA04
      *
      * @return null-terminated MAC address or null if no MAC address is assigned
      */
@@ -106,7 +106,7 @@ public:
     int8_t getRssi();
 
     /**
-     * Check if SPWFSA01 is connected
+     * Check if SPWFSA04 is connected
      *
      * @return true only if the chip has an IP address
      */
@@ -260,7 +260,7 @@ private:
     }
 
     bool _recv_ok(void) {
-        return _parser.recv("OK%*[\x0d]") && _recv_delim_lf();
+        return _parser.recv("AT-S.OK%*[\x0d]") && _recv_delim_lf();
     }
 
     bool _is_data_pending(void) {
@@ -333,4 +333,4 @@ private:
     char _mac_buffer[18];
 };
 
-#endif  //SPWFSA01_H
+#endif  //SPWFSA04_H
