@@ -39,8 +39,17 @@
 #include <limits.h>
 
 #include "mbed.h"
-#include "SPWFSA01.h"
 
+#define IDW01M1 1
+#define IDW04A1 2
+
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+#include "SPWFSA01.h"
+#elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+#include "SPWFSA04.h"
+#else
+#error No (valid) Wi-Fi exapnsion board defined (MBED_CONF_IDW0XX1_EXPANSION_BOARD: options are IDW01M1 and IDW04A1)
+#endif
 
 /* Max number of sockets */
 #define SPWFSA_SOCKET_COUNT 8
@@ -357,7 +366,11 @@ private:
         return (!sock.no_more_data);
     }
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
     SPWFSA01 _spwf;
+#elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    SPWFSA04 _spwf;
+#endif
 
     bool _isInitialized;
     bool _dbg_on;

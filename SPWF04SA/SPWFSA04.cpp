@@ -18,6 +18,8 @@
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+
 #if !defined(SPWFSA04_WAKEUP_PIN)
 #define SPWFSA04_WAKEUP_PIN   A3
 #endif
@@ -26,7 +28,7 @@
 #endif
 
 #define SPWFSA04_TX_MULTIPLE (1)
-#define SPWFSA04_RXBUFFER_SZ (730U)
+#define SPWFSA04_RXBUFFER_SZ (4*1024U) // betzw - WAS: (730U)
 #define SPWFSA04_TXBUFFER_SZ (SPWFSA04_RXBUFFER_SZ * SPWFSA04_TX_MULTIPLE)
 
 #define BH_HANDLER \
@@ -1116,3 +1118,5 @@ int SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
 
     return cnt;
 }
+
+#endif // MBED_CONF_IDW0XX1_EXPANSION_BOARD

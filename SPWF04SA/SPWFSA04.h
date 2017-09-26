@@ -17,6 +17,7 @@
 #ifndef SPWFSA04_H
 #define SPWFSA04_H
 
+#include "mbed.h"
 #include "ATParser.h"
 #include "BlockExecuter.h"
 
@@ -333,4 +334,4 @@ private:
     char _mac_buffer[18];
 };
 
-#endif  //SPWFSA04_H
+#endif // SPWFSA04_H

@@ -1,6 +1,8 @@
 #ifndef BLOCK_EXEC_H
 #define BLOCK_EXEC_H
 
+#include "mbed.h"
+
 /* Helper class to execute something whenever entering/leaving a basic block */
 class BlockExecuter {
 public:

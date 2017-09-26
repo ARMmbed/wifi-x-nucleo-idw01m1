@@ -18,6 +18,8 @@
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+
 #if !defined(SPWFSA01_WAKEUP_PIN)
 #define SPWFSA01_WAKEUP_PIN   PC_8
 #endif
@@ -1116,3 +1118,5 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
 
     return cnt;
 }
+
+#endif // MBED_CONF_IDW0XX1_EXPANSION_BOARD
