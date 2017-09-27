@@ -18,6 +18,13 @@
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
+#if !defined(SPWFSA01_WAKEUP_PIN)
+#define SPWFSA01_WAKEUP_PIN   PC_8
+#endif
+#if !defined(SPWFSA01_RESET_PIN)
+#define SPWFSA01_RESET_PIN    PC_12
+#endif
+
 #define SPWFSA01_TX_MULTIPLE (1)
 #define SPWFSA01_RXBUFFER_SZ (730U)
 #define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
@@ -27,7 +34,7 @@ static const char send_delim[] = {SPWFSA01::_cr_, '\0'};
 
 SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
 : _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
-  _wakeup(PC_8, 1), _reset(PC_12, 1),
+  _wakeup(SPWFSA01_WAKEUP_PIN, 1), _reset(SPWFSA01_RESET_PIN, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
   _pending_sockets_bitmap(0),

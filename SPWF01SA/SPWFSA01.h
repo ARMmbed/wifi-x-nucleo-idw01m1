@@ -21,7 +21,7 @@
 
 class SpwfSAInterface;
 
-/** SPWFSA01Interface class.
+/** SPWFSA01 Interface class.
     This is an interface to a SPWFSA01 module.
  */
 class SPWFSA01
