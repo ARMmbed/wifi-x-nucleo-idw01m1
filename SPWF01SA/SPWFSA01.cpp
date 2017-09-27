@@ -69,7 +69,7 @@ bool SPWFSA01::startup(int mode)
     /* factory reset */
     if(!(_parser.send("AT&F") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error restore factory default settings\r\n");
         return false;
     }
 
@@ -176,13 +176,19 @@ bool SPWFSA01::startup(int mode)
         return false;
     }
 
+    if (!(_parser.send("AT+S.GCFG=wifi_powersave")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
+        return false;
+    }
+
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
         return false;
     }
 
-    /* display the current values of all the status variables (only for debug) */
+   /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error AT+S.STS\r\n");

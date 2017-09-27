@@ -63,7 +63,7 @@ nsapi_error_t SpwfSAInterface::init(void)
     _spwf.setTimeout(SPWF_INIT_TIMEOUT);
 
     if(_spwf.startup(0)) {
-        return true;
+        return NSAPI_ERROR_OK;
     }
     else return NSAPI_ERROR_DEVICE_ERROR;
 }
@@ -101,7 +101,7 @@ nsapi_error_t SpwfSAInterface::connect(void)
     //initialize the device before connecting
     if(!_isInitialized)
     {
-        if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
+        if(init() != NSAPI_ERROR_OK) return NSAPI_ERROR_DEVICE_ERROR;
         _isInitialized=true;
     }
 
