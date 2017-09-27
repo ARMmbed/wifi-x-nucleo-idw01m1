@@ -98,6 +98,13 @@ bool SPWFSA04::startup(int mode)
         debug_if(true, "AT^ AT%s\r\n", msg_buffer);
     }
 
+    /*set mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
+        return false;
+    }
+
     /*set the operational rate*/
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
@@ -105,10 +112,10 @@ bool SPWFSA04::startup(int mode)
         return false;
     }
 
-    /*set mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
+    /*set Wi-Fi mode and rate to b/g/n*/
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
-        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
@@ -142,13 +149,6 @@ bool SPWFSA04::startup(int mode)
 
     /* sw reset */
     reset();
-
-    /*enable radio*/
-    if(!(_parser.send("AT+S.WIFI=1") && _recv_ok()))
-    {
-        debug_if(true, "\r\nSPWF> error enable radio\r\n");
-        return false;
-    }
 
 #ifndef NDEBUG
     /* display all configuration values (only for debug) */
@@ -309,7 +309,7 @@ bool SPWFSA04::connect(const char *ap, const char *passPhrase, int securityMode)
     reset();
 
     while(true)
-        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u%*[\x0d]",&n1, &n2, &n3, &n4) && _recv_delim_lf())
+        if(_parser.recv("+WIND:24:WiFi Up:%*u:%u.%u.%u.%u%*[\x0d]",&n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             debug_if(true, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4);
             break;
@@ -352,13 +352,13 @@ const char *SPWFSA04::getIPAddress(void)
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
-            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
+            && _parser.recv("AT-S.Var:ip_ipaddr=%u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(true, "\r\nSPWF> getIPAddress error\r\n");
         return NULL;
     }
 
-    debug_if(true, "AT^ #  ip_ipaddr = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(true, "AT^ AT-S.Var:ip_ipaddr=%u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _ip_buffer;
