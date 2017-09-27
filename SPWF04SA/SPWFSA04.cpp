@@ -1052,18 +1052,20 @@ static char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
 bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
 {
     bool ret;
+    int curr;
     unsigned int channel;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
-    /* check for end of list */
-    if(_recv_delim_cr_lf()) {
+    /* determing list end */
+    curr = _parser.getc();
+    if(curr == 'A') { // assume end of list ("AT-S.OK")
+        _parser.recv("T-S.OK%*[\x0d]") && _recv_delim_lf();
         return false;
     }
 
     /* run to 'horizontal tab' */
     while(_parser.getc() != '\x09');
-
 
     /* read in next line */
     ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
@@ -1129,27 +1131,35 @@ recv_ap_get_out:
     return ret;
 }
 
-int SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
+nsapi_size_or_error_t SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
 {
-    unsigned cnt = 0;
+    unsigned int cnt = 0, found;
     nsapi_wifi_ap_t ap;
 
-    if (!_parser.send("AT+S.SCAN")) {
+    if (!_parser.send("AT+S.SCAN=s,")) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    while (_recv_ap(&ap)) {
-        if (cnt < limit) {
-            res[cnt] = WiFiAccessPoint(ap);
-        }
-
-        cnt++;
-        if (limit != 0 && cnt >= limit) {
-            break;
-        }
+    if(!(_parser.recv("AT-S.Parsing Networks:%u%*[\x0d]", &found) && _recv_delim_lf())) {
+        debug_if(true, "SPWF> error start network scanning\r\n");
+        return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    _recv_ok();
+    debug_if(true, "AT^ AT-S.Parsing Networks:%u\r\n", found);
+
+    if(found > 0) {
+        while (_recv_ap(&ap)) {
+            if (cnt < limit) {
+                res[cnt] = WiFiAccessPoint(ap);
+            }
+
+            if (!((limit != 0) && ((cnt + 1) > limit))) {
+                cnt++;
+            }
+        }
+    } else {
+        _recv_ok();
+    }
 
     return cnt;
 }
