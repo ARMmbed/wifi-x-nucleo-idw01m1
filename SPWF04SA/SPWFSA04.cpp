@@ -440,7 +440,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
     int value;
     BH_HANDLER;
 
-    if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
+    if(!_parser.send("AT+S.SOCKON=%s,%d,NULL,%s", addr, port, type))
     {
         debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
         return false;
@@ -450,33 +450,36 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
      * otherwise module seems to remain in inconsistent state.
      */
 
-    /* wait for first character */
+    if(!_parser.recv("AT-S.")) { // get prefix
+        return false;
+    }
+
+    /* wait for next character */
     while((value = _parser.getc()) < 0);
 
-    if(value != _cr_) { // Note: this is different to what the spec exactly says
-        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-        return false;
-    }
-
-    if(!_recv_delim_lf()) { // Note: this is different to what the spec exactly says
-        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-        return false;
-    }
-
-    value = _parser.getc();
     switch(value) {
-        case ' ':
-            if(_parser.recv("ID: %d%*[\x0d]", &socket_id)
-                    && _recv_ok()) {
-                debug_if(true, "AT^  ID: %d\r\n", socket_id);
-
-                *spwf_id = socket_id;
-                return true;
+        case 'O':
+            /* get next character */
+            value = _parser.getc();
+            if(value != 'n') {
+                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                return false;
             }
-            break;
+
+            /* get socket id */
+            if(!(_parser.recv(":%*u.%*u.%*u.%*u:%d%*[\x0d]", &socket_id)
+                    && _recv_delim_lf()
+                    && _recv_ok())) {
+                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                return false;
+            }
+
+            *spwf_id = socket_id;
+            return true;
         case 'E':
-            if(_parser.recv("RROR: %[^\x0d]%*[\x0d]", msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: %s (%d)\r\n", msg_buffer, __LINE__);
+            int err_nr;
+            if(_parser.recv("RROR:%d:%[^\x0d]%*[\x0d]", &err_nr, msg_buffer) && _recv_delim_lf()) {
+                debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
             }
