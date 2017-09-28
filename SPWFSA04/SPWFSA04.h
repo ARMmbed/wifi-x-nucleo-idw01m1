@@ -21,6 +21,9 @@
 #include "ATParser.h"
 #include "BlockExecuter.h"
 
+#include "./spwfsa04_at_strings.h"
+#include "../SPWFSAxx.h"
+
 class SpwfSAInterface;
 
 /** SPWFSA04 Interface class.
@@ -236,7 +239,6 @@ private:
     void _server_gone_handler(void);
     void _wait_wifi_hw_started(void);
     void _wait_console_active(void);
-    void _wait_reset(void);
     int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);

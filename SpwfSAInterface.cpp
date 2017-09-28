@@ -214,7 +214,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
     }
 
     if(internal_id == SPWFSA_SOCKET_COUNT) {
-        debug_if(_dbg_on, "NO Socket ID Error\r\n");
+        debug_if(true, "NO Socket ID Error\r\n");
         return NSAPI_ERROR_NO_SOCKET;
     }
 

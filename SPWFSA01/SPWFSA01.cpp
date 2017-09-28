@@ -69,35 +69,35 @@ bool SPWFSA01::startup(int mode)
     /* factory reset */
     if(!(_parser.send("AT&F") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error restore factory default settings\r\n");
+        debug_if(true, "\r\nSPWF> error restore factory default settings\r\n");
         return false;
     }
 
     /*set local echo to 0*/
     if(!(_parser.send("AT+S.SCFG=localecho1,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
+        debug_if(true, "\r\nSPWF> error local echo set\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
     if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
+        debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
     /*set the operational rate*/
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error setting operational rates\r\n");
+        debug_if(true, "\r\nSPWF> error setting operational rates\r\n");
         return false;
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -105,7 +105,7 @@ bool SPWFSA01::startup(int mode)
     /*disable HW flow control*/
     if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+        debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
         return false;
     }
 #else
@@ -113,7 +113,7 @@ bool SPWFSA01::startup(int mode)
         /*enable HW flow control*/
         if(!(_parser.send("AT+S.SCFG=console1_hwfc,1") && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error enabling HW flow control\r\n");
             return false;
         }
 
@@ -123,7 +123,7 @@ bool SPWFSA01::startup(int mode)
         /*disable HW flow control*/
         if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
             return false;
         }
     }
@@ -136,67 +136,76 @@ bool SPWFSA01::startup(int mode)
     /* display all configuration values (only for debug) */
     if(!(_parser.send("AT&V") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT&V\r\n");
+        debug_if(true, "\r\nSPWF> error AT&V\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_speed")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_hwfc")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_delimiter")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=console1_errs")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=wifi_powersave")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
         return false;
     }
 
    /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.STS\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.STS\r\n");
         return false;
     }
 #endif
 
     return true;
+}
+
+void SPWFSA01::_wait_console_active(void) {
+    while(true) {
+        if (_parser.recv("+WIND:0:Console active%*[\x0d]") && _recv_delim_lf()) {
+            debug_if(true, "AT^ +WIND:0:Console active\r\n");
+            return;
+        }
+    }
 }
 
 void SPWFSA01::_wait_wifi_hw_started(void) {
@@ -210,12 +219,14 @@ void SPWFSA01::_wait_wifi_hw_started(void) {
 
 bool SPWFSA01::hw_reset(void)
 {
-    /* reset the pin PC12 */  
+#ifndef IDW04A1_WIFI_HW_BUG_WA // betzw: HW reset doesn't work as expected on unmodified X_NUCLEO_IDW04A1 expansion boards
     _reset.write(0);
     wait_ms(200);
     _reset.write(1); 
-
-    _wait_wifi_hw_started();
+#else // IDW04A1_WIFI_HW_BUG_WA: substitute with SW reset
+    _parser.send("AT+S.RESET");
+#endif // IDW04A1_WIFI_HW_BUG_WA
+    _wait_console_active();
     return true;
 }
 
@@ -224,7 +235,7 @@ bool SPWFSA01::reset(void)
     /* save current setting in flash */
     if(!(_parser.send("AT&W") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT&W\r\n");
+        debug_if(true, "\r\nSPWF> error AT&W\r\n");
         return false;
     }
 
@@ -249,21 +260,21 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error pass set\r\n");
+        debug_if(true, "\r\nSPWF> error pass set\r\n");
         return false;
     } 
 
     //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error ssid set\r\n");
+        debug_if(true, "\r\nSPWF> error ssid set\r\n");
         return false;
     }
 
     //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error security mode set\r\n");
+        debug_if(true, "\r\nSPWF> error security mode set\r\n");
         return false;
     }
 
@@ -271,7 +282,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     /*set STA mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -294,7 +305,7 @@ bool SPWFSA01::disconnect(void)
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -324,11 +335,11 @@ const char *SPWFSA01::getIPAddress(void)
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
             && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getIPAddress error\r\n");
+        debug_if(true, "\r\nSPWF> getIPAddress error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_ipaddr = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(true, "AT^ #  ip_ipaddr = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _ip_buffer;
@@ -341,11 +352,11 @@ const char *SPWFSA01::getGateway(void)
     if (!(_parser.send("AT+S.STS=ip_gw")
             && _parser.recv("#  ip_gw = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getGateway error\r\n");
+        debug_if(true, "\r\nSPWF> getGateway error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(true, "AT^ #  ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_gateway_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _gateway_buffer;
@@ -358,11 +369,11 @@ const char *SPWFSA01::getNetmask(void)
     if (!(_parser.send("AT+S.STS=ip_netmask")
             && _parser.recv("#  ip_netmask = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getNetmask error\r\n");
+        debug_if(true, "\r\nSPWF> getNetmask error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(true, "AT^ #  ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_netmask_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _netmask_buffer;
@@ -389,11 +400,11 @@ const char *SPWFSA01::getMACAddress(void)
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
             && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x%*[\x0d]", &n1, &n2, &n3, &n4, &n5, &n6)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getMACAddress error\r\n");
+        debug_if(true, "\r\nSPWF> getMACAddress error\r\n");
         return 0;
     }
 
-    debug_if(_dbg_on, "AT^ #  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r\n", n1, n2, n3, n4, n5, n6);
+    debug_if(true, "AT^ #  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r\n", n1, n2, n3, n4, n5, n6);
 
     sprintf((char*)_mac_buffer,"%02X:%02X:%02X:%02X:%02X:%02X", n1, n2, n3, n4, n5, n6);
     return _mac_buffer;
@@ -413,7 +424,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -439,7 +450,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
         case ' ':
             if(_parser.recv("ID: %d%*[\x0d]", &socket_id)
                     && _recv_ok()) {
-                debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
+                debug_if(true, "AT^  ID: %d\r\n", socket_id);
 
                 *spwf_id = socket_id;
                 return true;
@@ -690,7 +701,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\nRead Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                debug_if(true, "\r\nRead Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -846,7 +857,7 @@ void SPWFSA01::_packet_handler_th(void)
         return;
     }
 
-    debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
+    debug_if(true, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
 
     /* set that there is pending data for socket */
     /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values

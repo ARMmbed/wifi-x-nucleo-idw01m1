@@ -20,16 +20,16 @@
 
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
 
-/* Define beyond macro if you have applied the `WIFI_RST` HW patch on your X-NUCLEO-IDW04A1 expansion board */
-// #define IDW04A1_WIFI_HW_PATCH
+/* Define beyond macro if your X-NUCLEO-IDW04A1 expansion board has NOT the `WIFI_RST` HW patch applied on it */
+#define IDW04A1_WIFI_HW_BUG_WA
 
 #if !defined(SPWFSA04_WAKEUP_PIN)
 #define SPWFSA04_WAKEUP_PIN   A3
 #endif
 #if !defined(SPWFSA04_RESET_PIN)
-#ifdef IDW04A1_WIFI_HW_PATCH
+#ifndef IDW04A1_WIFI_HW_BUG_WA
 #define SPWFSA04_RESET_PIN    D7
-#else // !IDW04A1_WIFI_HW_PATCH
+#else // IDW04A1_WIFI_HW_PATCH
 #define SPWFSA04_RESET_PIN    NC
 #endif // !IDW04A1_WIFI_HW_PATCH
 #endif
@@ -40,8 +40,6 @@
 
 #define BH_HANDLER \
         BlockExecuter bh_handler(Callback<void()>(this, &SPWFSA04::_execute_bottom_halves))
-
-static char msg_buffer[128];
 
 static const char recv_delim[] = {SPWFSA04::_lf_, '\0'};
 static const char send_delim[] = {SPWFSA04::_cr_, '\0'};
@@ -85,28 +83,28 @@ bool SPWFSA04::startup(int mode)
     /*set local echo to 0*/
     if(!(_parser.send("AT+S.SCFG=console_echo,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
-        return false;
-    }
-
-    /*set mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
-    {
-        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
-        return false;
-    }
-
-    /*set the operational rate*/
-    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\nSPWF> error setting operational rates\r\n");
+        debug_if(true, "\r\nSPWF> error local echo set\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
     if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
+        debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
+        return false;
+    }
+
+    /*set the operational rate*/
+    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error setting operational rates\r\n");
+        return false;
+    }
+
+    /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
         return false;
     }
 
@@ -187,7 +185,7 @@ bool SPWFSA04::startup(int mode)
 
     if (!(_parser.send("AT+S.GCFG=wifi_powersave")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
+        debug_if(true, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
         return false;
     }
 
@@ -228,14 +226,13 @@ void SPWFSA04::_wait_wifi_hw_started(void) {
 
 bool SPWFSA04::hw_reset(void)
 {
-#ifdef IDW04A1_WIFI_HW_PATCH // betzw: HW reset doesn't work as expected on unmodified X_NUCLEO_IDW04A1 expansion boards
-    /* reset the pin D7 */
+#ifndef IDW04A1_WIFI_HW_BUG_WA // betzw: HW reset doesn't work as expected on unmodified X_NUCLEO_IDW04A1 expansion boards
     _reset.write(0);
     wait_ms(200);
     _reset.write(1); 
-#else // betzw: substitute with SW reset
+#else // IDW04A1_WIFI_HW_BUG_WA: substitute with SW reset
     _parser.send("AT+S.RESET");
-#endif // 0 / 1
+#endif // IDW04A1_WIFI_HW_BUG_WA
     _wait_console_active();
     return true;
 }
@@ -425,6 +422,7 @@ bool SPWFSA04::isConnected(void)
     return _associated_interface._connected_to_network;
 }
 
+static char err_msg_buffer[128];
 bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
@@ -469,8 +467,8 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             return true;
         case 'E':
             int err_nr;
-            if(_parser.recv("RROR:%d:%[^\x0d]%*[\x0d]", &err_nr, msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, msg_buffer, __LINE__);
+            if(_parser.recv("RROR:%d:%[^\x0d]%*[\x0d]", &err_nr, err_msg_buffer) && _recv_delim_lf()) {
+                debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, err_msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
             }
@@ -819,8 +817,8 @@ void SPWFSA04::_event_handler(void)
  */
 void SPWFSA04::_error_handler(void)
 {
-    if(_parser.recv(" %[^\x0d]%*[\x0d]", msg_buffer) && _recv_delim_lf()) {
-        debug_if(true, "AT^ ERROR: %s (%d)\r\n", msg_buffer, __LINE__);
+    if(_parser.recv(" %[^\x0d]%*[\x0d]", err_msg_buffer) && _recv_delim_lf()) {
+        debug_if(true, "AT^ ERROR: %s (%d)\r\n", err_msg_buffer, __LINE__);
     } else {
         debug_if(true, "\r\nSPWF> Unknown ERROR string in SPWFSA04::_error_handler (%d)\r\n", __LINE__);
     }
