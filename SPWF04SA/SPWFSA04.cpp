@@ -89,15 +89,6 @@ bool SPWFSA04::startup(int mode)
         return false;
     }
 
-    /*disable radio*/
-    if(!(_parser.send("AT+S.WIFI=0") && _parser.recv("AT%[^\x0d]%*[\x0d]", msg_buffer)))
-    {
-        debug_if(true, "\r\nSPWF> error disable radio\r\n");
-        return false;
-    } else {
-        debug_if(true, "AT^ AT%s\r\n", msg_buffer);
-    }
-
     /*set mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
