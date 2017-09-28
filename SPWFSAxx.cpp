@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-#include "SPWFSAxx.h"
-#include "SpwfSAInterface.h"
 #include "mbed_debug.h"
+
+#include "SpwfSAInterface.h" /* must be included first */
+#include "SPWFSAxx.h"
 
 static const char recv_delim[] = {SPWFSAxx::_lf_, '\0'};
 static const char send_delim[] = {SPWFSAxx::_cr_, '\0'};
@@ -37,11 +38,11 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
     _serial.attach(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debugOn(debug);
 
-    _parser.oob(SPWFXX_OOB_PENDING_DATA, this, &SPWFSAxx::_packet_handler_th);
-    _parser.oob(SPWFXX_OOB_SOCKET_CLOSED, this, &SPWFSAxx::_server_gone_handler);
-    _parser.oob(SPWFXX_OOB_NET_LOST, this, &SPWFSAxx::_network_lost_handler_th);
-    _parser.oob(SPWFXX_OOB_HARD_FAULT, this, &SPWFSAxx::_hard_fault_handler);
-    _parser.oob(SPWFXX_OOB_HW_FAILURE, this, &SPWFSAxx::_wifi_hwfault_handler);
+    _parser.oob("+WIND:55:Pending Data", this, &SPWFSAxx::_packet_handler_th);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSAxx::_server_gone_handler);
+    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSAxx::_network_lost_handler_th);
+    _parser.oob("+WIND:8:Hard Fault", this, &SPWFSAxx::_hard_fault_handler);
+    _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSAxx::_wifi_hwfault_handler);
     _parser.oob(SPWFXX_OOB_ERROR, this, &SPWFSAxx::_error_handler);
 }
 
@@ -51,35 +52,35 @@ bool SPWFSAxx::startup(int mode)
     hw_reset();
 
     /* factory reset */
-    if(!(_parser.send("AT&F") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_FWCFG) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error restore factory default settings\r\n");
         return false;
     }
 
     /*set local echo to 0*/
-    if(!(_parser.send("AT+S.SCFG=localecho1,0") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_LEOUT) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error local echo set\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_MODE_RATE) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
     /*set the operational rate*/
-    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_OP_MODE) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error setting operational rates\r\n");
         return false;
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_WIFI_MODE, mode) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error wifi mode set\r\n");
         return false;
@@ -87,7 +88,7 @@ bool SPWFSAxx::startup(int mode)
 
 #if !DEVICE_SERIAL_FC
     /*disable HW flow control*/
-    if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_DISABLE_HWFC) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
         return false;
@@ -95,7 +96,7 @@ bool SPWFSAxx::startup(int mode)
 #else
     if((_rts != NC) && (_cts != NC)) {
         /*enable HW flow control*/
-        if(!(_parser.send("AT+S.SCFG=console1_hwfc,1") && _recv_ok()))
+        if(!(_parser.send(SPWFXX_SEND_ENABLE_HWFC) && _recv_ok()))
         {
             debug_if(true, "\r\nSPWF> error enabling HW flow control\r\n");
             return false;
@@ -105,7 +106,7 @@ bool SPWFSAxx::startup(int mode)
         _serial.set_flow_control(SerialBase::RTSCTS, _rts, _cts);
     } else {
         /*disable HW flow control*/
-        if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+        if(!(_parser.send(SPWFXX_SEND_DISABLE_HWFC) && _recv_ok()))
         {
             debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
             return false;
@@ -118,64 +119,64 @@ bool SPWFSAxx::startup(int mode)
 
 #ifndef NDEBUG
     /* display all configuration values (only for debug) */
-    if(!(_parser.send("AT&V") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_DSPLY_CFGV) && _recv_ok()))
     {
-        debug_if(true, "\r\nSPWF> error AT&V\r\n");
+        debug_if(true, "\r\nSPWF> error displaying all config vars\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_enabled")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error getting console state\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_speed")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_SPEED)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
+        debug_if(true, "\r\nSPWF> error getting console speed\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_hwfc")
+    if (!(_parser.send(SPWFXX_SEND_GET_HWFC_STATE)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
+        debug_if(true, "\r\nSPWF> error getting hwfc state\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_delimiter")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
+        debug_if(true, "\r\nSPWF> error getting console delimiter delimiter\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_errs")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_ERRS)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
+        debug_if(true, "\r\nSPWF> error getting console error setting\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=sleep_enabled")
+    if (!(_parser.send(SPWFXX_SEND_GET_SLEEP_ENBLD)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error getting sleep state enabled\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=wifi_powersave")
+    if (!(_parser.send(SPWFXX_SEND_GET_PWS_MODE)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=wifi_powersave\r\n");
+        debug_if(true, "\r\nSPWF> error getting powersave mode\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=standby_enabled")
+    if (!(_parser.send(SPWFXX_SEND_GET_STBY_ENBLD)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
+        debug_if(true, "\r\nSPWF> error getting standby state enabled\r\n");
         return false;
     }
 
    /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
-        debug_if(true, "\r\nSPWF> error AT+S.STS\r\n");
+        debug_if(true, "\r\nSPWF> error displaying all status vars\r\n");
         return false;
     }
 #endif

@@ -28,9 +28,11 @@ class SpwfSAInterface;
  */
 class SPWFSAxx
 {
-public:
+protected:
+    /* abstract class*/
     SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
 
+public:
     /**
      * Init the SPWFSAxx
      *
