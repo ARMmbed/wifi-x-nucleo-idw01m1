@@ -44,9 +44,9 @@
 #define IDW04A1 2
 
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
-#include "SPWFSA01.h"
+#include "SPWFSA01/SPWFSA01.h"
 #elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
-#include "SPWFSA04.h"
+#include "SPWFSA04/SPWFSA04.h"
 #else
 #error No (valid) Wi-Fi exapnsion board defined (MBED_CONF_IDW0XX1_EXPANSION_BOARD: options are IDW01M1 and IDW04A1)
 #endif

@@ -1,4 +1,4 @@
-/* SPWFInterface Example
+/* SPWFSAxx Devices
  * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
  
-#ifndef SPWFSA01_H
-#define SPWFSA01_H
+#ifndef SPWFSAXX_H
+#define SPWFSAXX_H
 
 #include "mbed.h"
 #include "ATParser.h"
@@ -23,26 +23,26 @@
 
 class SpwfSAInterface;
 
-/** SPWFSA01 Interface class.
-    This is an interface to a SPWFSA01 module.
+/** SPWFSAxx Interface class.
+    This is an interface to a SPWFSAxx module.
  */
-class SPWFSA01
+class SPWFSAxx
 {
 public:
-    SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
+    SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
 
     /**
-     * Init the SPWFSA01
+     * Init the SPWFSAxx
      *
      * @param mode mode in which to startup
-     * @return true only if SPWFSA01 has started up correctly
+     * @return true only if SPWFSAxx has started up correctly
      */
     bool startup(int mode);
 
     /**
-     * Reset SPWFSA01
+     * Reset SPWFSAxx
      *
-     * @return true only if SPWFSA01 resets successfully
+     * @return true only if SPWFSAxx resets successfully
      */
     bool hw_reset(void);
     bool reset(void);
@@ -51,36 +51,36 @@ public:
      * Enable/Disable DHCP
      *
      * @param mode mode of DHCP 2-softAP, 1-on, 0-off
-     * @return true only if SPWFSA01 enables/disables DHCP successfully
+     * @return true only if SPWFSAxx enables/disables DHCP successfully
      */
     bool dhcp(int mode);
 
     /**
-     * Connect SPWFSA01 to AP
+     * Connect SPWFSAxx to AP
      *
      * @param ap the name of the AP
      * @param passPhrase the password of AP
      * @param securityMode the security mode of AP (WPA/WPA2, WEP, Open)
-     * @return true only if SPWFSA01 is connected successfully
+     * @return true only if SPWFSAxx is connected successfully
      */
     bool connect(const char *ap, const char *passPhrase, int securityMode);
 
     /**
-     * Disconnect SPWFSA01 from AP
+     * Disconnect SPWFSAxx from AP
      *
-     * @return true only if SPWFSA01 is disconnected successfully
+     * @return true only if SPWFSAxx is disconnected successfully
      */
     bool disconnect(void);
 
     /**
-     * Get the IP address of SPWFSA01
+     * Get the IP address of SPWFSAxx
      *
      * @return null-teriminated IP address or null if no IP address is assigned
      */
     const char *getIPAddress(void);
 
     /**
-     * Get the MAC address of SPWFSA01
+     * Get the MAC address of SPWFSAxx
      *
      * @return null-terminated MAC address or null if no MAC address is assigned
      */
@@ -107,7 +107,7 @@ public:
     int8_t getRssi();
 
     /**
-     * Check if SPWFSA01 is connected
+     * Check if SPWFSAxx is connected
      *
      * @return true only if the chip has an IP address
      */
@@ -203,7 +203,7 @@ public:
     static const char _cr_ = '\x0d'; // '\r' carriage return
     static const char _lf_ = '\x0a'; // '\n' line feed
 
-private:
+protected:
     BufferedSerial _serial;
     ATParser _parser;
     DigitalOut _wakeup;
@@ -261,7 +261,7 @@ private:
     }
 
     bool _recv_ok(void) {
-        return _parser.recv("OK%*[\x0d]") && _recv_delim_lf();
+        return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
     bool _is_data_pending(void) {
@@ -334,4 +334,4 @@ private:
     char _mac_buffer[18];
 };
 
-#endif // SPWFSA01_H
+#endif // SPWFSAXX_H
