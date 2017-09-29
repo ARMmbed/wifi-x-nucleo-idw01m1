@@ -197,7 +197,7 @@ public:
      */
     using NetworkInterface::add_dns_server;
 
-protected:
+private:
     /** Open a socket
      *  @param handle       Handle in which to store new socket
      *  @param proto        Type of socket to open, NSAPI_TCP or NSAPI_UDP
@@ -420,6 +420,7 @@ private:
     }
 
 private:
+    friend class SPWFSAxx;
     friend class SPWFSA01;
     friend class SPWFSA04;
 };

@@ -28,7 +28,7 @@ class SpwfSAInterface;
  */
 class SPWFSAxx
 {
-protected:
+private:
     /* abstract class*/
     SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
 
@@ -48,14 +48,6 @@ public:
      */
     bool hw_reset(void);
     bool reset(void);
-
-    /**
-     * Enable/Disable DHCP
-     *
-     * @param mode mode of DHCP 2-softAP, 1-on, 0-off
-     * @return true only if SPWFSAxx enables/disables DHCP successfully
-     */
-    bool dhcp(int mode);
 
     /**
      * Connect SPWFSAxx to AP
@@ -114,26 +106,6 @@ public:
      * @return true only if the chip has an IP address
      */
     bool isConnected(void);
-
-    /** Scan for available networks
-     *
-     * @param  ap    Pointer to allocated array to store discovered AP
-     * @param  limit Size of allocated @a res array, or 0 to only count available AP
-     * @return       Number of entries in @a res, or if @a count was 0 number of available networks, negative on error
-     *               see @a nsapi_error
-     */
-    nsapi_size_or_error_t scan(WiFiAccessPoint *res, unsigned limit);
-
-    /**
-     * Open a socketed connection
-     *
-     * @param type the type of socket to open "u" (UDP) or "t" (TCP)
-     * @param id id to get the new socket number, valid 0-7
-     * @param port port to open connection with
-     * @param addr the IP address of the destination
-     * @return true only if socket opened successfully
-     */
-    bool open(const char *type, int* id, const char* addr, int port);
 
     /**
      * Sends data to an open socket
@@ -205,7 +177,7 @@ public:
     static const char _cr_ = '\x0d'; // '\r' carriage return
     static const char _lf_ = '\x0a'; // '\n' line feed
 
-protected:
+private:
     BufferedSerial _serial;
     ATParser _parser;
     DigitalOut _wakeup;
@@ -249,7 +221,6 @@ protected:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
-    bool _recv_ap(nsapi_wifi_ap_t *ap);
 
     bool _recv_delim_lf(void) {
         return (_parser.getc() == _lf_);
@@ -335,6 +306,16 @@ protected:
     char _gateway_buffer[16];
     char _netmask_buffer[16];
     char _mac_buffer[18];
+
+    char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
+    char *_err_msg_buffer;
+
+private:
+    friend class SPWFSA01;
+    friend class SPWFSA04;
 };
+
+#define BH_HANDLER \
+        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves))
 
 #endif // SPWFSAXX_H
