@@ -1,4 +1,4 @@
-/* SPWFInterface Example
+/* SPWFSAxx Devices
  * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,27 +14,20 @@
  * limitations under the License.
  */
 
-#include "SPWFSA01.h"
-#include "SpwfSAInterface.h"
 #include "mbed_debug.h"
 
-#if !defined(SPWFSA01_WAKEUP_PIN)
-#define SPWFSA01_WAKEUP_PIN   PC_8
-#endif
-#if !defined(SPWFSA01_RESET_PIN)
-#define SPWFSA01_RESET_PIN    PC_12
-#endif
+#include "SpwfSAInterface.h" /* must be included first */
+#include "SPWFSAxx.h"
 
-#define SPWFSA01_TX_MULTIPLE (1)
-#define SPWFSA01_RXBUFFER_SZ (730U)
-#define SPWFSA01_TXBUFFER_SZ (SPWFSA01_RXBUFFER_SZ * SPWFSA01_TX_MULTIPLE)
+static const char recv_delim[] = {SPWFSAxx::_lf_, '\0'};
+static const char send_delim[] = {SPWFSAxx::_cr_, '\0'};
 
-static const char recv_delim[] = {SPWFSA01::_lf_, '\0'};
-static const char send_delim[] = {SPWFSA01::_cr_, '\0'};
-
-SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
-: _serial(tx, rx, SPWFSA01_RXBUFFER_SZ, SPWFSA01_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
-  _wakeup(SPWFSA01_WAKEUP_PIN, 1), _reset(SPWFSA01_RESET_PIN, 1),
+SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
+                   PinName rts, PinName cts,
+                   SpwfSAInterface &ifce, bool debug,
+                   PinName wakeup, PinName reset)
+: _serial(tx, rx, SPWFSAXX_RXBUFFER_SZ, SPWFSAXX_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
+  _wakeup(wakeup, 1), _reset(reset, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
   _pending_sockets_bitmap(0),
@@ -42,34 +35,42 @@ SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInter
   _associated_interface(ifce),
   _call_event_callback_blocked(false),
   _callback_func(),
-  _packets(0), _packets_end(&_packets)
+  _packets(0), _packets_end(&_packets),
+  _err_msg_buffer(ssid_buf)
 {
     _serial.baud(115200);
-    _serial.attach(Callback<void()>(this, &SPWFSA01::_event_handler));
+    _serial.attach(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debugOn(debug);
 
-    _parser.oob("+WIND:55:Pending Data", this, &SPWFSA01::_packet_handler_th);
-    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSA01::_server_gone_handler);
-    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSA01::_network_lost_handler_th);
-    _parser.oob("+WIND:8:Hard Fault", this, &SPWFSA01::_hard_fault_handler);
-    _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSA01::_wifi_hwfault_handler);
-    _parser.oob("ERROR:", this, &SPWFSA01::_error_handler);
+    _parser.oob("+WIND:55:Pending Data", this, &SPWFSAxx::_packet_handler_th);
+    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSAxx::_server_gone_handler);
+    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSAxx::_network_lost_handler_th);
+    _parser.oob("+WIND:8:Hard Fault", this, &SPWFSAxx::_hard_fault_handler);
+    _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSAxx::_wifi_hwfault_handler);
+    _parser.oob(SPWFXX_OOB_ERROR, this, &SPWFSAxx::_error_handler);
 }
 
-bool SPWFSA01::startup(int mode)
+bool SPWFSAxx::startup(int mode)
 {
     /*Reset module*/
     hw_reset();
 
     /* factory reset */
-    if(!(_parser.send("AT&F") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_FWCFG) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error restore factory default settings\r\n");
+        return false;
+    }
+
+    /*switch off led*/
+    if(!(_parser.send("AT+S.SCFG=blink_led,0") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "\r\nSPWF> error stop blinking led (%d)\r\n", __LINE__);
         return false;
     }
 
     /*set local echo to 0*/
-    if(!(_parser.send("AT+S.SCFG=localecho1,0") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_DISABLE_LE) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
         return false;
@@ -92,13 +93,13 @@ bool SPWFSA01::startup(int mode)
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
 #if !DEVICE_SERIAL_FC
     /*disable HW flow control*/
-    if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
         return false;
@@ -106,7 +107,7 @@ bool SPWFSA01::startup(int mode)
 #else
     if((_rts != NC) && (_cts != NC)) {
         /*enable HW flow control*/
-        if(!(_parser.send("AT+S.SCFG=console1_hwfc,1") && _recv_ok()))
+        if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
             return false;
@@ -116,7 +117,7 @@ bool SPWFSA01::startup(int mode)
         _serial.set_flow_control(SerialBase::RTSCTS, _rts, _cts);
     } else {
         /*disable HW flow control*/
-        if(!(_parser.send("AT+S.SCFG=console1_hwfc,0") && _recv_ok()))
+        if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
             return false;
@@ -124,63 +125,72 @@ bool SPWFSA01::startup(int mode)
     }
 #endif
 
+    /* Disable selected WINDs */
+    _winds_on();
+
     /* sw reset */
     reset();
 
 #ifndef NDEBUG
     /* display all configuration values (only for debug) */
-    if(!(_parser.send("AT&V") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_DSPLY_CFGV) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT&V\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error displaying all config vars\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_enabled")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_enabled\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting console state\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_speed")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_SPEED)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_speed\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting console speed\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_hwfc")
+    if (!(_parser.send(SPWFXX_SEND_GET_HWFC_STATE)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_hwfc\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting hwfc state\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_delimiter")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_delimiter\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting console delimiter delimiter\r\n");
         return false;
     }
 
-    if (!(_parser.send("AT+S.GCFG=console1_errs")
+    if (!(_parser.send(SPWFXX_SEND_GET_CONS_ERRS)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=console1_errs\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting console error setting\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=sleep_enabled\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting sleep state enabled\r\n");
+        return false;
+    }
+
+    if (!(_parser.send("AT+S.GCFG=wifi_powersave")
+            && _recv_ok())) {
+        debug_if(_dbg_on, "\r\nSPWF> error getting powersave mode\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.GCFG=standby_enabled\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting standby state enabled\r\n");
         return false;
     }
 
-    /* display the current values of all the status variables (only for debug) */
+   /* display the current values of all the status variables (only for debug) */
     if(!(_parser.send("AT+S.STS") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT+S.STS\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error displaying all status vars\r\n");
         return false;
     }
 #endif
@@ -188,7 +198,16 @@ bool SPWFSA01::startup(int mode)
     return true;
 }
 
-void SPWFSA01::_wait_wifi_hw_started(void) {
+void SPWFSAxx::_wait_console_active(void) {
+    while(true) {
+        if (_parser.recv("+WIND:0:Console active%*[\x0d]") && _recv_delim_lf()) {
+            debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
+            return;
+        }
+    }
+}
+
+void SPWFSAxx::_wait_wifi_hw_started(void) {
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started%*[\x0d]") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
@@ -197,27 +216,29 @@ void SPWFSA01::_wait_wifi_hw_started(void) {
     }
 }
 
-bool SPWFSA01::hw_reset(void)
+bool SPWFSAxx::hw_reset(void)
 {
-    /* reset the pin PC12 */  
+#if (MBED_CONF_IDW0XX1_EXPANSION_BOARD != IDW04A1) || !defined(IDW04A1_WIFI_HW_BUG_WA) // betzw: HW reset doesn't work as expected on unmodified X_NUCLEO_IDW04A1 expansion boards
     _reset.write(0);
     wait_ms(200);
     _reset.write(1); 
-
-    _wait_wifi_hw_started();
+#else // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) && defined(IDW04A1_WIFI_HW_BUG_WA): substitute with SW reset
+    _parser.send(SPWFXX_SEND_SW_RESET);
+#endif // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) && defined(IDW04A1_WIFI_HW_BUG_WA)
+    _wait_console_active();
     return true;
 }
 
-bool SPWFSA01::reset(void)
+bool SPWFSAxx::reset(void)
 {
     /* save current setting in flash */
-    if(!(_parser.send("AT&W") && _recv_ok()))
+    if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error AT&W\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error saving configuration to flash\r\n");
         return false;
     }
 
-    if(!_parser.send("AT+CFUN=1")) return false; /* betzw - NOTE: "keep the current state and reset the device".
+    if(!_parser.send(SPWFXX_SEND_SW_RESET)) return false; /* betzw - NOTE: "keep the current state and reset the device".
                                                                    We assume that the module informs us about the
                                                                    eventual closing of sockets via "WIND" asynchronous
                                                                    indications! So everything regarding the clean-up
@@ -231,7 +252,7 @@ bool SPWFSA01::reset(void)
    WEP           = 1,
    WPA_Personal  = 2,
  */
-bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
+bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 {
     uint32_t n1, n2, n3, n4;
 
@@ -256,11 +277,10 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
         return false;
     }
 
-    //"AT+S.SCFG=wifi_mode,%d"
     /*set STA mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set 1 (STA)\r\n");
         return false;
     }
 
@@ -268,7 +288,7 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     reset();
 
     while(true)
-        if(_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u%*[\x0d]",&n1, &n2, &n3, &n4) && _recv_delim_lf())
+        if(_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             debug_if(_dbg_on, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4);
             break;
@@ -277,13 +297,12 @@ bool SPWFSA01::connect(const char *ap, const char *passPhrase, int securityMode)
     return true;
 }
 
-bool SPWFSA01::disconnect(void)
+bool SPWFSAxx::disconnect(void)
 {
-    //"AT+S.SCFG=wifi_mode,%d"
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -293,170 +312,101 @@ bool SPWFSA01::disconnect(void)
     return true;
 }
 
-bool SPWFSA01::dhcp(int mode)
-{
-    //only 3 valid modes
-    //0->off(ip_addr must be set by user), 1->on(auto set by AP), 2->on&customize(miniAP ip_addr can be set by user)
-    if(mode < 0 || mode > 2) {
-        return false;
-    }
-
-    return _parser.send("AT+S.SCFG=ip_use_dhcp,%d", mode)
-            && _recv_ok();
-}
-
-
-const char *SPWFSA01::getIPAddress(void)
+const char *SPWFSAxx::getIPAddress(void)
 {
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
-            && _parser.recv("#  ip_ipaddr = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
+            && _parser.recv(SPWFXX_RECV_IP_ADDR, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getIPAddress error\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> get IP address error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_ipaddr = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(_dbg_on, "AT^ ip_ipaddr = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_ip_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _ip_buffer;
 }
 
-const char *SPWFSA01::getGateway(void)
+const char *SPWFSAxx::getGateway(void)
 {
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_gw")
-            && _parser.recv("#  ip_gw = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
+            && _parser.recv(SPWFXX_RECV_GATEWAY, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getGateway error\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> get gateway error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(_dbg_on, "AT^ ip_gw = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_gateway_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _gateway_buffer;
 }
 
-const char *SPWFSA01::getNetmask(void)
+const char *SPWFSAxx::getNetmask(void)
 {
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_netmask")
-            && _parser.recv("#  ip_netmask = %u.%u.%u.%u%*[\x0d]", &n1, &n2, &n3, &n4)
+            && _parser.recv("SPWFXX_RECV_NETMASK", &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getNetmask error\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> get netmask error\r\n");
         return NULL;
     }
 
-    debug_if(_dbg_on, "AT^ #  ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
+    debug_if(_dbg_on, "AT^ ip_netmask = %u.%u.%u.%u\r\n", n1, n2, n3, n4);
 
     sprintf((char*)_netmask_buffer,"%u.%u.%u.%u", n1, n2, n3, n4);
     return _netmask_buffer;
 }
 
-int8_t SPWFSA01::getRssi(void)
+int8_t SPWFSAxx::getRssi(void)
 {
     int ret;
 
     if (!(_parser.send("AT+S.PEERS=0,rx_rssi")
-            && _parser.recv("#  0.rx_rssi = %d%*[\x0d]", &ret)
+            && _parser.recv(SPWFXX_RECV_RX_RSSI, &ret)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getRssi error\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> get RX rssi error\r\n");
         return 0;
     }
 
     return (int8_t)ret;
 }
 
-const char *SPWFSA01::getMACAddress(void)
+const char *SPWFSAxx::getMACAddress(void)
 {
     unsigned int n1, n2, n3, n4, n5, n6;
 
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
-            && _parser.recv("#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x%*[\x0d]", &n1, &n2, &n3, &n4, &n5, &n6)
+            && _parser.recv(SPWFXX_RECV_MAC_ADDR, &n1, &n2, &n3, &n4, &n5, &n6)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> getMACAddress error\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> get MAC address error\r\n");
         return 0;
     }
 
-    debug_if(_dbg_on, "AT^ #  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r\n", n1, n2, n3, n4, n5, n6);
+    debug_if(_dbg_on, "AT^ nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\r\n", n1, n2, n3, n4, n5, n6);
 
     sprintf((char*)_mac_buffer,"%02X:%02X:%02X:%02X:%02X:%02X", n1, n2, n3, n4, n5, n6);
     return _mac_buffer;
 }
 
-bool SPWFSA01::isConnected(void)
+bool SPWFSAxx::isConnected(void)
 {
     return _associated_interface._connected_to_network;
 }
 
-static char err_msg_buffer[128];
-bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
-{
-    int socket_id;
-    int value;
-    BH_HANDLER;
-
-    if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
-    {
-        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-        return false;
-    }
-
-    /* handle both response possibilities here before returning
-     * otherwise module seems to remain in inconsistent state.
-     */
-
-    /* wait for first character */
-    while((value = _parser.getc()) < 0);
-
-    if(value != _cr_) { // Note: this is different to what the spec exactly says
-        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-        return false;
-    }
-
-    if(!_recv_delim_lf()) { // Note: this is different to what the spec exactly says
-        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-        return false;
-    }
-
-    value = _parser.getc();
-    switch(value) {
-        case ' ':
-            if(_parser.recv("ID: %d%*[\x0d]", &socket_id)
-                    && _recv_ok()) {
-                debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
-
-                *spwf_id = socket_id;
-                return true;
-            }
-            break;
-        case 'E':
-            if(_parser.recv("RROR: %[^\x0d]%*[\x0d]", err_msg_buffer) && _recv_delim_lf()) {
-                debug_if(_dbg_on, "AT^ ERROR: %s (%d)\r\n", err_msg_buffer, __LINE__);
-            } else {
-                debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-            }
-            break;
-        default:
-            debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
-            break;
-    }
-
-    return false;
-}
-
-bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
+bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
 {
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > SPWFSA01_TXBUFFER_SZ) ? SPWFSA01_TXBUFFER_SZ : amount;
+    for(to_send = (amount > SPWFSAXX_TXBUFFER_SZ) ? SPWFSAXX_TXBUFFER_SZ : amount;
             sent < amount;
-            to_send = ((amount - sent) > SPWFSA01_TXBUFFER_SZ) ? SPWFSA01_TXBUFFER_SZ : (amount - sent)) {
+            to_send = ((amount - sent) > SPWFSAXX_TXBUFFER_SZ) ? SPWFSAXX_TXBUFFER_SZ : (amount - sent)) {
         {
             BH_HANDLER;
 
@@ -475,11 +425,11 @@ bool SPWFSA01::send(int spwf_id, const void *data, uint32_t amount)
     return ret;
 }
 
-int SPWFSA01::_read_len(int spwf_id) {
+int SPWFSAxx::_read_len(int spwf_id) {
     uint32_t amount;
 
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
-            && _parser.recv(" DATALEN: %u%*[\x0d]", &amount)
+            && _parser.recv(SPWFXX_RECV_DATALEN, &amount)
             && _recv_ok())) {
         return 0;
     }
@@ -487,67 +437,29 @@ int SPWFSA01::_read_len(int spwf_id) {
     return (int)amount;
 }
 
-int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
-    int ret = -1;
+#define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
-    MBED_ASSERT(buffer != NULL);
-
-    /* block asynchronous indications */
-    if(!_winds_off()) {
-        return -1;
-    }
-
-    /* read in data */
-    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-        /* set high timeout */
-        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
-        /* read in binary data */
-        int read = _parser.read(buffer, amount);
-        /* reset timeout value */
-        _parser.setTimeout(_timeout);
-        if(read > 0) {
-            if(_recv_ok()) {
-                ret = amount;
-            } else {
-                debug_if(_dbg_on, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
-            }
-        } else {
-            debug_if(_dbg_on, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
-        }
-    } else {
-        debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
-    }
-
-    /* unblock asynchronous indications */
-    _winds_on();
-
-    return ret;
-}
-
-#define WINDS_OFF "0xFFFFFFFF"
-#define WINDS_ON  "0x00000000"
-
-void SPWFSA01::_winds_on(void) {
-    _parser.send("AT+S.SCFG=wind_off_high," WINDS_ON) && _recv_ok();
-    _parser.send("AT+S.SCFG=wind_off_medium," WINDS_ON) && _recv_ok();
-    _parser.send("AT+S.SCFG=wind_off_low," WINDS_ON) && _recv_ok();
+void SPWFSAxx::_winds_on(void) {
+    _parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok();
+    _parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok();
+    _parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok();
 }
 
 /* Note: in case of error blocking has been (tried to be) lifted */
-bool SPWFSA01::_winds_off(void) {
-    if (!(_parser.send("AT+S.SCFG=wind_off_low," WINDS_OFF)
+bool SPWFSAxx::_winds_off(void) {
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
     }
 
-    if (!(_parser.send("AT+S.SCFG=wind_off_medium," WINDS_OFF)
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
     }
 
-    if (!(_parser.send("AT+S.SCFG=wind_off_high," WINDS_OFF)
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
@@ -556,12 +468,12 @@ bool SPWFSA01::_winds_off(void) {
     return true;
 }
 
-void SPWFSA01::_execute_bottom_halves(void) {
+void SPWFSAxx::_execute_bottom_halves(void) {
     _network_lost_handler_bh();
     _packet_handler_bh();
 }
 
-void SPWFSA01::_read_in_pending(void) {
+void SPWFSAxx::_read_in_pending(void) {
     static int internal_id_cnt = 0;
 
     while(_is_data_pending()) {
@@ -593,7 +505,7 @@ void SPWFSA01::_read_in_pending(void) {
  * '0'  in case of `_read_in()` error
  * '-1' in case of "out of memory"
  */
-int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
+int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
@@ -630,10 +542,10 @@ int SPWFSA01::_read_in_packet(int spwf_id, int amount) {
  * '0'   in case of `_read_in()` error no more data to be read
  * '-1'  in case of "out of memory"
  */
-int SPWFSA01::_read_in_packet(int spwf_id) {
+int SPWFSAxx::_read_in_packet(int spwf_id) {
     int amount;
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* call (external) callback only while not receiving */
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
 
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
@@ -646,7 +558,7 @@ int SPWFSA01::_read_in_packet(int spwf_id) {
     return amount;
 }
 
-void SPWFSA01::_free_packets(int spwf_id) {
+void SPWFSAxx::_free_packets(int spwf_id) {
     // check if any packets are ready for `spwf_id`
     for(struct packet **p = &_packets; *p;) {
         if ((*p)->id == spwf_id) {
@@ -662,7 +574,7 @@ void SPWFSA01::_free_packets(int spwf_id) {
     }
 }
 
-void SPWFSA01::_free_all_packets() {
+void SPWFSAxx::_free_all_packets() {
     for (int spwf_id = 0; spwf_id < SPWFSA_SOCKET_COUNT; spwf_id++) {
         _free_packets(spwf_id);
     }
@@ -671,7 +583,7 @@ void SPWFSA01::_free_all_packets() {
 /**
  *	Recv Function
  */
-int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
+int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount)
 {
     BH_HANDLER;
 
@@ -679,7 +591,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\nRead Done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                debug_if(_dbg_on, "\r\nRead done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
                 if (q->len <= amount) { // Return and remove full packet
                     memcpy(data, q+1, q->len);
@@ -714,7 +626,7 @@ int32_t SPWFSA01::recv(int spwf_id, void *data, uint32_t amount)
 }
 
 #define CLOSE_MAX_RETRY (3)
-bool SPWFSA01::close(int spwf_id)
+bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
     int retry_cnt = 0;
@@ -762,6 +674,8 @@ close_bh_handling:
 
         /* free packets for this socket */
         _free_packets(spwf_id);
+    } else {
+        debug_if(_dbg_on, "\r\nSPWF> SPWFSAxx::close failed  (%d)\r\n", __LINE__);
     }
 
     return ret;
@@ -773,7 +687,7 @@ close_bh_handling:
  * Note: executed in IRQ context!
  * Note: call (external) callback only while not receiving
  */
-void SPWFSA01::_event_handler(void)
+void SPWFSAxx::_event_handler(void)
 {
     if(!_is_event_callback_blocked()) {
         _call_callback();
@@ -783,12 +697,12 @@ void SPWFSA01::_event_handler(void)
 /*
  * Common error handler
  */
-void SPWFSA01::_error_handler(void)
+void SPWFSAxx::_error_handler(void)
 {
-    if(_parser.recv(" %[^\x0d]%*[\x0d]", err_msg_buffer) && _recv_delim_lf()) {
-        debug_if(_dbg_on, "AT^ ERROR: %s (%d)\r\n", err_msg_buffer, __LINE__);
+    if(_parser.recv("%[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {
+        debug_if(_dbg_on, "AT^ ERROR:%s (%d)\r\n", _err_msg_buffer, __LINE__);
     } else {
-        debug_if(_dbg_on, "\r\nSPWF> Unknown ERROR string in SPWFSA01::_error_handler (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
     }
 
     /* force call of (external) callback */
@@ -798,19 +712,21 @@ void SPWFSA01::_error_handler(void)
 /*
  * Handling oob ("+WIND:33:WiFi Network Lost")
  */
-void SPWFSA01::_network_lost_handler_th(void)
+void SPWFSAxx::_network_lost_handler_th(void)
 {
 #ifndef NDEBUG
     static unsigned int net_loss_cnt = 0;
     net_loss_cnt++;
 #endif
 
+    _recv_delim_cr_lf();
+
     debug_if(_dbg_on, "AT^ +WIND:33:WiFi Network Lost\r\n");
 
 #ifndef NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", net_loss_cnt);
+    debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", net_loss_cnt);
 #else // NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_th: %d\r\n", __LINE__);
+    debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", __LINE__);
 #endif // NDEBUG
 
     /* set flag to signal network loss */
@@ -822,15 +738,15 @@ void SPWFSA01::_network_lost_handler_th(void)
 /*
  * Handling oob ("+WIND:55:Pending Data")
  */
-void SPWFSA01::_packet_handler_th(void)
+void SPWFSAxx::_packet_handler_th(void)
 {
     int spwf_id;
     int amount;
 
     /* parse out the socket id & amount */
-    if (!(_parser.recv(":%d:%d%*[\x0d]", &spwf_id, &amount) && _recv_delim_lf())) {
+    if (!(_parser.recv(SPWFXX_RECV_PENDING_DATA, &spwf_id, &amount) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSAxx::%s failed!\r\n", __func__);
 #endif
         return;
     }
@@ -844,15 +760,15 @@ void SPWFSA01::_packet_handler_th(void)
     _set_pending_data(spwf_id);
 }
 
-void SPWFSA01::_network_lost_handler_bh(void)
+void SPWFSAxx::_network_lost_handler_bh(void)
 {
     if(!_network_lost_flag) return;
     _network_lost_flag = false;
 
     {
         bool were_connected;
-        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSA01::_unblock_and_callback),
-                                     Callback<void()>(this, &SPWFSA01::_block_event_callback)); /* call (external) callback only while not receiving */
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_and_callback),
+                                     Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
         Timer timer;
         timer.start();
 
@@ -866,12 +782,12 @@ void SPWFSA01::_network_lost_handler_bh(void)
 
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                    debug_if(_dbg_on, "\r\n SPWFSA01::_network_lost_handler_bh() #%d\r\n", __LINE__);
+                    debug_if(_dbg_on, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
                     goto nlh_get_out;
                 }
 
-                if((_parser.recv("+WIND:24:WiFi Up:%u.%u.%u.%u%*[\x0d]",&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
+                if((_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                     debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                     _associated_interface._connected_to_network = true;
@@ -879,19 +795,19 @@ void SPWFSA01::_network_lost_handler_bh(void)
                 }
             }
         } else {
-            debug_if(_dbg_on, "Leaving SPWFSA01::_network_lost_handler_bh\r\n");
+            debug_if(_dbg_on, "Leaving SPWFSAxx::_network_lost_handler_bh\r\n");
             goto nlh_get_out;
         }
 
     nlh_get_out:
-        debug_if(_dbg_on, "Getting out of SPWFSA01::_network_lost_handler_bh\r\n");
+        debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
         _parser.setTimeout(_timeout);
 
         return;
     }
 }
 
-void SPWFSA01::_recover_from_hard_faults(void) {
+void SPWFSAxx::_recover_from_hard_faults(void) {
     disconnect();
     _associated_interface.inner_constructor();
     _free_all_packets();
@@ -903,29 +819,15 @@ void SPWFSA01::_recover_from_hard_faults(void) {
 /*
  * Handling oob ("+WIND:8:Hard Fault")
  */
-void SPWFSA01::_hard_fault_handler(void)
+void SPWFSAxx::_hard_fault_handler(void)
 {
-    int console_nr = -1;
-    int reg0 = 0xFFFFFFFF,
-            reg1 = 0xFFFFFFFF,
-            reg2 = 0xFFFFFFFF,
-            reg3 = 0xFFFFFFFF,
-            reg12 = 0xFFFFFFFF;
-
     _parser.setTimeout(SPWF_RECV_TIMEOUT);
-    _parser.recv(":Console%d: r0 %x, r1 %x, r2 %x, r3 %x, r12 %x%*[\x0d]",
-                 &console_nr,
-                 &reg0, &reg1, &reg2, &reg3, &reg12);
-    _recv_delim_lf();
+    if(_parser.recv("%[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
-    error("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
-          console_nr,
-          reg0, reg1, reg2, reg3, reg12);
+    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
 #else // NDEBUG
-    debug("\r\nSPWFSA01 hard fault error: Console%d: r0 %08X, r1 %08X, r2 %08X, r3 %08X, r12 %08X\r\n",
-          console_nr,
-          reg0, reg1, reg2, reg3, reg12);
+    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.setTimeout(SPWF_HF_TIMEOUT);
@@ -940,18 +842,18 @@ void SPWFSA01::_hard_fault_handler(void)
 /*
  * Handling oob ("+WIND:5:WiFi Hardware Failure")
  */
-void SPWFSA01::_wifi_hwfault_handler(void)
+void SPWFSAxx::_wifi_hwfault_handler(void)
 {
-    int failure_nr;
+    unsigned int failure_nr;
 
     /* parse out the socket id & amount */
-    _parser.recv(":%d%*[\x0d]", &failure_nr);
+    _parser.recv(":%u%*[\x0d]", &failure_nr);
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    error("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\nSPWFSA01 wifi HW fault error: %d\r\n", failure_nr);
+    debug("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this WiFi radio failure
     _recover_from_hard_faults();
@@ -968,13 +870,13 @@ void SPWFSA01::_wifi_hwfault_handler(void)
  * NOTE: When a socket client receives an indication about socket server gone (only for TCP sockets, WIND:58),
  *       the socket connection is NOT automatically closed!
  */
-void SPWFSA01::_server_gone_handler(void)
+void SPWFSAxx::_server_gone_handler(void)
 {
     int spwf_id, internal_id;
 
-    if(!(_parser.recv(":%d%*[\x0d]", &spwf_id) && _recv_delim_lf())) {
+    if(!(_parser.recv(SPWFXX_RECV_SOCKET_CLOSED, &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\nSPWFSA01::%s failed!\r\n", __func__);
+        error("\r\nSPWFSAxx::%s failed!\r\n", __func__);
 #endif
         goto _get_out;
     }
@@ -997,118 +899,13 @@ _get_out:
     _call_callback();
 }
 
-void SPWFSA01::setTimeout(uint32_t timeout_ms)
+void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 {
     _timeout = timeout_ms;
     _parser.setTimeout(timeout_ms);
 }
 
-void SPWFSA01::attach(Callback<void()> func)
+void SPWFSAxx::attach(Callback<void()> func)
 {
     _callback_func = func; /* call (external) callback only while not receiving */
-}
-
-static char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
-bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
-{
-    bool ret;
-    unsigned int channel;
-
-    ap->security = NSAPI_SECURITY_UNKNOWN;
-
-    /* check for end of list */
-    if(_recv_delim_cr_lf()) {
-        return false;
-    }
-
-    /* run to 'horizontal tab' */
-    while(_parser.getc() != '\x09');
-
-    /* read in next line */
-    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
-                       &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
-                       &channel, &ap->rssi, ssid_buf);
-
-    if(ret) {
-        int value;
-
-        /* copy values */
-        memcpy(&ap->ssid, ssid_buf, 32);
-        ap->ssid[32] = '\0';
-        ap->channel = channel;
-
-        /* skip 'CAPS' */
-        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 ")
-            _parser.getc();
-        }
-
-        /* get next character */
-        value = _parser.getc();
-        if(value != 'W') { // no security
-            ap->security = NSAPI_SECURITY_NONE;
-            goto recv_ap_get_out;
-        }
-
-        /* determine security */
-        {
-            char buffer[10];
-
-            if(!_parser.recv("%s%*[\x20]", &buffer)) {
-                goto recv_ap_get_out;
-            } else if(strncmp("EP", buffer, 10) == 0) {
-                ap->security = NSAPI_SECURITY_WEP;
-                goto recv_ap_get_out;
-            } else if(strncmp("PA2", buffer, 10) == 0) {
-                ap->security = NSAPI_SECURITY_WPA2;
-                goto recv_ap_get_out;
-            } else if(strncmp("PA", buffer, 10) != 0) {
-                goto recv_ap_get_out;
-            }
-
-            /* got a "WPA", check for "WPA2" */
-            value = _parser.getc();
-            if(value == _cr_) { // no further protocol
-                ap->security = NSAPI_SECURITY_WPA;
-                goto recv_ap_get_out;
-            } else { // assume "WPA2"
-                ap->security = NSAPI_SECURITY_WPA_WPA2;
-                goto recv_ap_get_out;
-            }
-        }
-    } else {
-        debug("%s - ERROR: Should never happen!\r\n", __func__);
-    }
-
-recv_ap_get_out:
-    if(ret) {
-        /* wait for next line feed */
-        while(!_recv_delim_lf());
-    }
-
-    return ret;
-}
-
-int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
-{
-    unsigned cnt = 0;
-    nsapi_wifi_ap_t ap;
-
-    if (!_parser.send("AT+S.SCAN")) {
-        return NSAPI_ERROR_DEVICE_ERROR;
-    }
-
-    while (_recv_ap(&ap)) {
-        if (cnt < limit) {
-            res[cnt] = WiFiAccessPoint(ap);
-        }
-
-        cnt++;
-        if (limit != 0 && cnt >= limit) {
-            break;
-        }
-    }
-
-    _recv_ok();
-
-    return cnt;
 }

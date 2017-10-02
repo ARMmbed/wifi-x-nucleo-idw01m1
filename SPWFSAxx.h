@@ -1,4 +1,4 @@
-/* SPWFInterface Example
+/* SPWFSAxx Devices
  * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,71 +14,69 @@
  * limitations under the License.
  */
  
-#ifndef SPWFSA01_H
-#define SPWFSA01_H
+#ifndef SPWFSAXX_H
+#define SPWFSAXX_H
 
+#include "mbed.h"
 #include "ATParser.h"
+#include "BlockExecuter.h"
 
 class SpwfSAInterface;
 
-/** SPWFSA01 Interface class.
-    This is an interface to a SPWFSA01 module.
+/** SPWFSAxx Interface class.
+    This is an interface to a SPWFSAxx module.
  */
-class SPWFSA01
+class SPWFSAxx
 {
-public:
-    SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
+private:
+    /* abstract class*/
+    SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts,
+             SpwfSAInterface &ifce, bool debug,
+             PinName wakeup, PinName reset);
 
+public:
     /**
-     * Init the SPWFSA01
+     * Init the SPWFSAxx
      *
      * @param mode mode in which to startup
-     * @return true only if SPWFSA01 has started up correctly
+     * @return true only if SPWFSAxx has started up correctly
      */
     bool startup(int mode);
 
     /**
-     * Reset SPWFSA01
+     * Reset SPWFSAxx
      *
-     * @return true only if SPWFSA01 resets successfully
+     * @return true only if SPWFSAxx resets successfully
      */
     bool hw_reset(void);
     bool reset(void);
 
     /**
-     * Enable/Disable DHCP
-     *
-     * @param mode mode of DHCP 2-softAP, 1-on, 0-off
-     * @return true only if SPWFSA01 enables/disables DHCP successfully
-     */
-    bool dhcp(int mode);
-
-    /**
-     * Connect SPWFSA01 to AP
+     * Connect SPWFSAxx to AP
      *
      * @param ap the name of the AP
      * @param passPhrase the password of AP
      * @param securityMode the security mode of AP (WPA/WPA2, WEP, Open)
-     * @return true only if SPWFSA01 is connected successfully
+     * @return true only if SPWFSAxx is connected successfully
      */
     bool connect(const char *ap, const char *passPhrase, int securityMode);
 
     /**
-     * Disconnect SPWFSA01 from AP
+     * Disconnect SPWFSAxx from AP
      *
-     * @return true only if SPWFSA01 is disconnected successfully
+     * @return true only if SPWFSAxx is disconnected successfully
      */
     bool disconnect(void);
 
     /**
-     * Get the IP address of SPWFSA01
+     * Get the IP address of SPWFSAxx
      *
      * @return null-teriminated IP address or null if no IP address is assigned
      */
     const char *getIPAddress(void);
 
     /**
-     * Get the MAC address of SPWFSA01
+     * Get the MAC address of SPWFSAxx
      *
      * @return null-terminated MAC address or null if no MAC address is assigned
      */
@@ -105,31 +103,11 @@ public:
     int8_t getRssi();
 
     /**
-     * Check if SPWFSA01 is connected
+     * Check if SPWFSAxx is connected
      *
      * @return true only if the chip has an IP address
      */
     bool isConnected(void);
-
-    /** Scan for available networks
-     *
-     * @param  ap    Pointer to allocated array to store discovered AP
-     * @param  limit Size of allocated @a res array, or 0 to only count available AP
-     * @return       Number of entries in @a res, or if @a count was 0 number of available networks, negative on error
-     *               see @a nsapi_error
-     */
-    nsapi_size_or_error_t scan(WiFiAccessPoint *res, unsigned limit);
-
-    /**
-     * Open a socketed connection
-     *
-     * @param type the type of socket to open "u" (UDP) or "t" (TCP)
-     * @param id id to get the new socket number, valid 0-7
-     * @param port port to open connection with
-     * @param addr the IP address of the destination
-     * @return true only if socket opened successfully
-     */
-    bool open(const char *type, int* id, const char* addr, int port);
 
     /**
      * Sends data to an open socket
@@ -233,7 +211,7 @@ private:
     void _wifi_hwfault_handler(void);
     void _server_gone_handler(void);
     void _wait_wifi_hw_started(void);
-    int _read_in(char*, int, uint32_t);
+    void _wait_console_active(void);
     int _read_len(int);
     int _flush_in(char*, int);
     bool _winds_off(void);
@@ -244,7 +222,8 @@ private:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
-    bool _recv_ap(nsapi_wifi_ap_t *ap);
+
+    virtual int _read_in(char*, int, uint32_t) = 0;
 
     bool _recv_delim_lf(void) {
         return (_parser.getc() == _lf_);
@@ -259,7 +238,7 @@ private:
     }
 
     bool _recv_ok(void) {
-        return _parser.recv("OK%*[\x0d]") && _recv_delim_lf();
+        return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
     bool _is_data_pending(void) {
@@ -330,25 +309,16 @@ private:
     char _gateway_buffer[16];
     char _netmask_buffer[16];
     char _mac_buffer[18];
-};
 
-/* Helper class to execute something whenever entering/leaving a basic block */
-class BlockExecuter {
-public:
-    BlockExecuter(Callback<void()> exit_cb, Callback<void()> enter_cb = Callback<void()>()) :
-        _exit_cb(exit_cb) {
-        if((bool)enter_cb) enter_cb();
-    }
-
-    ~BlockExecuter(void) {
-        _exit_cb();
-    }
+    char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
+    char *_err_msg_buffer;
 
 private:
-    Callback<void()> _exit_cb;
+    friend class SPWFSA01;
+    friend class SPWFSA04;
 };
 
 #define BH_HANDLER \
-        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSA01::_execute_bottom_halves))
+        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves))
 
-#endif  //SPWFSA01_H
+#endif // SPWFSAXX_H

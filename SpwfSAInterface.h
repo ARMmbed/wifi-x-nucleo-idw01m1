@@ -1,5 +1,5 @@
 /* mbed Microcontroller Library
-* Copyright (c) 20015 ARM Limited
+* Copyright (c) 2015 ARM Limited
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -39,8 +39,17 @@
 #include <limits.h>
 
 #include "mbed.h"
-#include "SPWFSA01.h"
 
+#define IDW01M1 1
+#define IDW04A1 2
+
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+#include "SPWFSA01/SPWFSA01.h"
+#elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+#include "SPWFSA04/SPWFSA04.h"
+#else
+#error No (valid) Wi-Fi exapnsion board defined (MBED_CONF_IDW0XX1_EXPANSION_BOARD: options are IDW01M1 and IDW04A1)
+#endif
 
 /* Max number of sockets */
 #define SPWFSA_SOCKET_COUNT 8
@@ -52,11 +61,11 @@
 #define SPWF_SEND_TIMEOUT       10000
 #define SPWF_INIT_TIMEOUT       6000
 #define SPWF_SCAN_TIMEOUT       3000
+#define SPWF_OPEN_TIMEOUT       2002
 #define SPWF_SENDTO_TIMEOUT     2001
 #define SPWF_HF_TIMEOUT         2000
 #define SPWF_CLOSE_TIMEOUT      1001
 #define SPWF_DISCONNECT_TIMEOUT 1000
-#define SPWF_OPEN_TIMEOUT       500
 #define SPWF_MISC_TIMEOUT       301
 #define SPWF_RECV_TIMEOUT       300
 
@@ -73,8 +82,12 @@ public:
      * @param rts       RTS pin
      * @param cts       CTS pin
      * @param debug     Enable debugging
+     * @param wakeup    Wakeup pin
+     * @param reset     Reset pin
      */
-    SpwfSAInterface(PinName tx, PinName rx, PinName rts = NC, PinName cts = NC, bool debug = false);
+    SpwfSAInterface(PinName tx, PinName rx,
+                    PinName rts = NC, PinName cts = NC, bool debug = false,
+                    PinName wakeup = SPWFSAXX_WAKEUP_PIN, PinName reset = SPWFSAXX_RESET_PIN);
 
     /** Start the interface
      *
@@ -188,7 +201,7 @@ public:
      */
     using NetworkInterface::add_dns_server;
 
-protected:
+private:
     /** Open a socket
      *  @param handle       Handle in which to store new socket
      *  @param proto        Type of socket to open, NSAPI_TCP or NSAPI_UDP
@@ -357,7 +370,11 @@ private:
         return (!sock.no_more_data);
     }
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
     SPWFSA01 _spwf;
+#elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    SPWFSA04 _spwf;
+#endif
 
     bool _isInitialized;
     bool _dbg_on;
@@ -407,7 +424,9 @@ private:
     }
 
 private:
+    friend class SPWFSAxx;
     friend class SPWFSA01;
+    friend class SPWFSA04;
 };
 
 #define CHECK_NOT_CONNECTED_ERR() { \
