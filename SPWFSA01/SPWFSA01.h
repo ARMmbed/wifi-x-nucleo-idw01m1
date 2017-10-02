@@ -59,6 +59,7 @@ public:
 
 private:
     bool _recv_ap(nsapi_wifi_ap_t *ap);
+    int _read_in(char*, int, uint32_t);
 };
 
 #endif // SPWFSA01_H

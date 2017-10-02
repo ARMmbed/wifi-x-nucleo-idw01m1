@@ -16,7 +16,7 @@
 #endif
 
 #define SPWFSAXX_TX_MULTIPLE (1)
-#define SPWFSAXX_RXBUFFER_SZ (4*1024U) // betzw - WAS: (730U)
+#define SPWFSAXX_RXBUFFER_SZ (750U)
 #define SPWFSAXX_TXBUFFER_SZ (SPWFSAXX_RXBUFFER_SZ * SPWFSAXX_TX_MULTIPLE)
 
 #define SPWFXX_OOB_ERROR            "AT-S.ERROR:"                                           // "ERROR:"
@@ -29,12 +29,11 @@
 #define SPWFXX_RECV_RX_RSSI         "AT-S.Var:0.rx_rssi=%d%*[\x0d]"                         // "#  0.rx_rssi = %d%*[\x0d]"
 #define SPWFXX_RECV_MAC_ADDR        "AT-S.Var:nv_wifi_macaddr=%x:%x:%x:%x:%x:%x%*[\x0d]"    // "#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x%*[\x0d]"
 #define SPWFXX_RECV_DATALEN         "AT-S.Query:%u%*[\x0d]"                                 // " DATALEN: %u%*[\x0d]"
-#define SPWFXX_RECV_PENDING_DATA    ":%*u:%u:%*u:%u%*[\x0d]"                                // ":%d:%d%*[\x0d]"
+#define SPWFXX_RECV_PENDING_DATA    "::%u:%*u:%u%*[\x0d]"                                   // ":%d:%d%*[\x0d]"
 #define SPWFXX_RECV_SOCKET_CLOSED   ":%u:%*u%*[\x0d]"                                       // ":%d%*[\x0d]"
 
 #define SPWFXX_SEND_FWCFG           "AT+S.FCFG"                                             // "AT&F"
 #define SPWFXX_SEND_DISABLE_LE      "AT+S.SCFG=console_echo,0"                              // "AT+S.SCFG=localecho1,0"
-#define SPWFXX_SEND_WIFI_MODE       "AT+S.SCFG=wifi_mode,%d"                                // "AT+S.SCFG=wifi_mode,%d"
 #define SPWFXX_SEND_DSPLY_CFGV      "AT+S.GCFG"                                             // "AT&V"
 #define SPWFXX_SEND_GET_CONS_STATE  "AT+S.GCFG=console_enabled"                             // "AT+S.GCFG=console1_enabled"
 #define SPWFXX_SEND_GET_CONS_SPEED  "AT+S.GCFG=console_speed"                               // "AT+S.GCFG=console1_speed"
@@ -48,5 +47,9 @@
 #define SPWFXX_SEND_WIND_OFF_HIGH   "AT+S.SCFG=console_wind_off_high,"                      // "AT+S.SCFG=wind_off_high,"
 #define SPWFXX_SEND_WIND_OFF_MEDIUM "AT+S.SCFG=console_wind_off_medium,"                    // "AT+S.SCFG=wind_off_medium,"
 #define SPWFXX_SEND_WIND_OFF_LOW    "AT+S.SCFG=console_wind_off_low,"                       // "AT+S.SCFG=wind_off_low,"
+
+#define SPWFXX_WINDS_HIGH_ON        "0x00100000"                                            // "0x00000000"
+#define SPWFXX_WINDS_MEDIUM_ON      "0x80000000"                                            // "0x00000000"
+#define SPWFXX_WINDS_LOW_ON         "0x00000000"
 
 #endif // SPWFSAXX_AT_STRINGS_H

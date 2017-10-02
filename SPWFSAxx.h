@@ -212,7 +212,6 @@ private:
     void _server_gone_handler(void);
     void _wait_wifi_hw_started(void);
     void _wait_console_active(void);
-    int _read_in(char*, int, uint32_t);
     int _read_len(int);
     int _flush_in(char*, int);
     bool _winds_off(void);
@@ -223,6 +222,8 @@ private:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
+
+    virtual int _read_in(char*, int, uint32_t) = 0;
 
     bool _recv_delim_lf(void) {
         return (_parser.getc() == _lf_);

@@ -62,6 +62,13 @@ bool SPWFSAxx::startup(int mode)
         return false;
     }
 
+    /*switch off led*/
+    if(!(_parser.send("AT+S.SCFG=blink_led,0") && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error stop blinking led (%d)\r\n", __LINE__);
+        return false;
+    }
+
     /*set local echo to 0*/
     if(!(_parser.send(SPWFXX_SEND_DISABLE_LE) && _recv_ok()))
     {
@@ -84,7 +91,7 @@ bool SPWFSAxx::startup(int mode)
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
-    if(!(_parser.send(SPWFXX_SEND_WIFI_MODE, mode) && _recv_ok()))
+    if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
         return false;
@@ -117,6 +124,9 @@ bool SPWFSAxx::startup(int mode)
         }
     }
 #endif
+
+    /* Disable selected WINDs */
+    _winds_on();
 
     /* sw reset */
     reset();
@@ -427,67 +437,29 @@ int SPWFSAxx::_read_len(int spwf_id) {
     return (int)amount;
 }
 
-int SPWFSAxx::_read_in(char* buffer, int spwf_id, uint32_t amount) {
-    int ret = -1;
-
-    MBED_ASSERT(buffer != NULL);
-
-    /* block asynchronous indications */
-    if(!_winds_off()) {
-        return -1;
-    }
-
-    /* read in data */
-    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-        /* set high timeout */
-        _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
-        /* read in binary data */
-        int read = _parser.read(buffer, amount);
-        /* reset timeout value */
-        _parser.setTimeout(_timeout);
-        if(read > 0) {
-            if(_recv_ok()) {
-                ret = amount;
-            } else {
-                debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
-            }
-        } else {
-            debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
-        }
-    } else {
-        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
-    }
-
-    /* unblock asynchronous indications */
-    _winds_on();
-
-    return ret;
-}
-
-#define WINDS_OFF "0xFFFFFFFF"
-#define WINDS_ON  "0x00000000"
+#define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
 void SPWFSAxx::_winds_on(void) {
-    _parser.send(SPWFXX_SEND_WIND_OFF_HIGH WINDS_ON) && _recv_ok();
-    _parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM WINDS_ON) && _recv_ok();
-    _parser.send(SPWFXX_SEND_WIND_OFF_LOW WINDS_ON) && _recv_ok();
+    _parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok();
+    _parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok();
+    _parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok();
 }
 
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
-    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW WINDS_OFF)
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
     }
 
-    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM WINDS_OFF)
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
     }
 
-    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH WINDS_OFF)
+    if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         _winds_on();
         return false;
@@ -702,6 +674,8 @@ close_bh_handling:
 
         /* free packets for this socket */
         _free_packets(spwf_id);
+    } else {
+        debug_if(true, "\r\nSPWF> SPWFSAxx::close failed  (%d)\r\n", __LINE__);
     }
 
     return ret;
@@ -813,7 +787,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
                     goto nlh_get_out;
                 }
 
-                if((_parser.recv(SPWFXX_RECV_WIFI_UP,&n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
+                if((_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
                     debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                     _associated_interface._connected_to_network = true;
