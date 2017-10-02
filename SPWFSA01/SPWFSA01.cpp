@@ -20,8 +20,11 @@
 
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
 
-SPWFSA01::SPWFSA01(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
-: SPWFSAxx(tx, rx, rts, cts, ifce, debug) {
+SPWFSA01::SPWFSA01(PinName tx, PinName rx,
+                   PinName rts, PinName cts,
+                   SpwfSAInterface &ifce, bool debug,
+                   PinName wakeup, PinName reset)
+: SPWFSAxx(tx, rx, rts, cts, ifce, debug, wakeup, reset) {
 }
 
 bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)

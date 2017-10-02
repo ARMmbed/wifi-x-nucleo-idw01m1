@@ -32,7 +32,10 @@ class SpwfSAInterface;
 class SPWFSA04 : public SPWFSAxx
 {
 public:
-    SPWFSA04(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
+    SPWFSA04(PinName tx, PinName rx,
+             PinName rts, PinName cts,
+             SpwfSAInterface &ifce, bool debug,
+             PinName wakeup, PinName reset);
 
     /**
      * Open a socketed connection

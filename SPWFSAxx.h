@@ -30,7 +30,9 @@ class SPWFSAxx
 {
 private:
     /* abstract class*/
-    SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug=false);
+    SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts,
+             SpwfSAInterface &ifce, bool debug,
+             PinName wakeup, PinName reset);
 
 public:
     /**

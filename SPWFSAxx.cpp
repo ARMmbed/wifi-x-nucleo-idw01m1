@@ -22,9 +22,12 @@
 static const char recv_delim[] = {SPWFSAxx::_lf_, '\0'};
 static const char send_delim[] = {SPWFSAxx::_cr_, '\0'};
 
-SPWFSAxx::SPWFSAxx(PinName tx, PinName rx, PinName rts, PinName cts, SpwfSAInterface &ifce, bool debug)
+SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
+                   PinName rts, PinName cts,
+                   SpwfSAInterface &ifce, bool debug,
+                   PinName wakeup, PinName reset)
 : _serial(tx, rx, SPWFSAXX_RXBUFFER_SZ, SPWFSAXX_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
-  _wakeup(SPWFSAXX_WAKEUP_PIN, 1), _reset(SPWFSAXX_RESET_PIN, 1),
+  _wakeup(wakeup, 1), _reset(reset, 1),
   _rts(rts), _cts(cts),
   _timeout(0), _dbg_on(debug),
   _pending_sockets_bitmap(0),
@@ -848,9 +851,9 @@ void SPWFSAxx::_hard_fault_handler(void)
     if(_parser.recv("%[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX hard fault error: %s\r\n", _err_msg_buffer);
+    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX hard fault error: %s\r\n", _err_msg_buffer);
+    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.setTimeout(SPWF_HF_TIMEOUT);
@@ -867,16 +870,16 @@ void SPWFSAxx::_hard_fault_handler(void)
  */
 void SPWFSAxx::_wifi_hwfault_handler(void)
 {
-    int failure_nr;
+    unsigned int failure_nr;
 
     /* parse out the socket id & amount */
-    _parser.recv(":%d%*[\x0d]", &failure_nr);
+    _parser.recv(":%u%*[\x0d]", &failure_nr);
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX wifi HW fault error: %d\r\n", failure_nr);
+    error("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX wifi HW fault error: %d\r\n", failure_nr);
+    debug("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this WiFi radio failure
     _recover_from_hard_faults();

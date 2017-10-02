@@ -82,8 +82,12 @@ public:
      * @param rts       RTS pin
      * @param cts       CTS pin
      * @param debug     Enable debugging
+     * @param wakeup    Wakeup pin
+     * @param reset     Reset pin
      */
-    SpwfSAInterface(PinName tx, PinName rx, PinName rts = NC, PinName cts = NC, bool debug = false);
+    SpwfSAInterface(PinName tx, PinName rx,
+                    PinName rts = NC, PinName cts = NC, bool debug = false,
+                    PinName wakeup = SPWFSAXX_WAKEUP_PIN, PinName reset = SPWFSAXX_RESET_PIN);
 
     /** Start the interface
      *

@@ -45,8 +45,10 @@
  *         debug : not used
  * @retval none
  */
-SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx, PinName rts, PinName cts, bool debug)
-: _spwf(tx, rx, rts, cts, *this, debug),
+SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx,
+                                 PinName rts, PinName cts, bool debug,
+                                 PinName wakeup, PinName reset)
+: _spwf(tx, rx, rts, cts, *this, debug, wakeup, reset),
   _dbg_on(debug)
 {
     inner_constructor();
