@@ -659,7 +659,7 @@ close_flush:
             /* interleave bottom halves */
             _execute_bottom_halves();
 
-            /* retry flushing */
+            /* retry flushing (assuming data is still pending) */
             goto close_flush;
         }
     }
