@@ -1,12 +1,25 @@
 #ifndef SPWFSAXX_AT_STRINGS_H
 #define SPWFSAXX_AT_STRINGS_H
 
+#if defined(TARGET_FF_MORPHO)
+
 #if !defined(SPWFSAXX_WAKEUP_PIN)
 #define SPWFSAXX_WAKEUP_PIN   PC_8                                              // A3
-#endif
+#endif // !defined(SPWFSAXX_WAKEUP_PIN)
 #if !defined(SPWFSAXX_RESET_PIN)
 #define SPWFSAXX_RESET_PIN    PC_12                                             // D7 / NC
-#endif
+#endif // !defined(SPWFSAXX_RESET_PIN)
+
+#else // !defined(TARGET_FF_MORPHO)
+
+#if !defined(SPWFSAXX_WAKEUP_PIN)
+#define SPWFSAXX_WAKEUP_PIN   NC                                                // A3
+#endif // !defined(SPWFSAXX_WAKEUP_PIN)
+#if !defined(SPWFSAXX_RESET_PIN)
+#define SPWFSAXX_RESET_PIN    NC                                                // D7 / NC
+#endif // !defined(SPWFSAXX_RESET_PIN)
+
+#endif // !defined(TARGET_FF_MORPHO)
 
 #define SPWFSAXX_TX_MULTIPLE (1)
 #define SPWFSAXX_RXBUFFER_SZ (730U)
