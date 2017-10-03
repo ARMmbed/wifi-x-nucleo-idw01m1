@@ -305,7 +305,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
  *         size: size of data
  * @retval no of bytes sent
  */
-nsapi_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
+nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
@@ -474,7 +474,7 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
     //initialize the device before scanning
     if(!_isInitialized)
     {
-        if(!init()) return NSAPI_ERROR_DEVICE_ERROR;
+        if(init() != NSAPI_ERROR_OK) return NSAPI_ERROR_DEVICE_ERROR;
     }
 
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);

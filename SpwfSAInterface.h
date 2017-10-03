@@ -60,11 +60,11 @@
 #define SPWF_READ_BIN_TIMEOUT   13000
 #define SPWF_SEND_TIMEOUT       10000
 #define SPWF_INIT_TIMEOUT       6000
-#define SPWF_CLOSE_TIMEOUT      3003
-#define SPWF_OPEN_TIMEOUT       3002
-#define SPWF_CONN_SND_TIMEOUT   3001
-#define SPWF_SCAN_TIMEOUT       3000
-#define SPWF_HF_TIMEOUT         2000
+#define SPWF_CLOSE_TIMEOUT      5003
+#define SPWF_OPEN_TIMEOUT       5002
+#define SPWF_CONN_SND_TIMEOUT   5001
+#define SPWF_SCAN_TIMEOUT       5000
+#define SPWF_HF_TIMEOUT         3000
 #define SPWF_DISCONNECT_TIMEOUT 1000
 #define SPWF_MISC_TIMEOUT       301
 #define SPWF_RECV_TIMEOUT       300
@@ -263,7 +263,7 @@ private:
      *  @note This call is not-blocking, if this call would block, must
      *        immediately return NSAPI_ERROR_WOULD_WAIT
      */
-    virtual nsapi_error_t socket_send(void *handle, const void *data, unsigned size);
+    virtual nsapi_size_or_error_t socket_send(void *handle, const void *data, unsigned size);
 
     /** Receive data from the remote host
      *  @param handle       Socket handle

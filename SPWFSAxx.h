@@ -193,7 +193,7 @@ private:
     SpwfSAInterface &_associated_interface;
 
     /* call (external) callback only while not receiving */
-    bool _call_event_callback_blocked;
+    volatile bool _call_event_callback_blocked;
     Callback<void()> _callback_func;
 
     struct packet {

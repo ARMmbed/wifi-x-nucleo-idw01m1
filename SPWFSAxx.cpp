@@ -29,7 +29,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 : _serial(tx, rx, SPWFSAXX_RXBUFFER_SZ, SPWFSAXX_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
   _wakeup(wakeup, 1), _reset(reset, 1),
   _rts(rts), _cts(cts),
-  _timeout(0), _dbg_on(debug),
+  _timeout(SPWF_INIT_TIMEOUT), _dbg_on(debug),
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
@@ -351,7 +351,7 @@ const char *SPWFSAxx::getNetmask(void)
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_netmask")
-            && _parser.recv("SPWFXX_RECV_NETMASK", &n1, &n2, &n3, &n4)
+            && _parser.recv(SPWFXX_RECV_NETMASK, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(true, "\r\nSPWF> get netmask error\r\n");
         return NULL;
