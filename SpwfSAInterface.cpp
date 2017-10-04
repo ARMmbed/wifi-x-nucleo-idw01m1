@@ -314,7 +314,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *dat
     _spwf.setTimeout(SPWF_SEND_TIMEOUT);
 
     if(!_socket_is_still_connected(socket)) {
-        return NSAPI_ERROR_NO_ADDRESS;
+        return NSAPI_ERROR_CONNECTION_LOST;
     }
 
     if (!_spwf.send(socket->spwf_id, data, size)) {
@@ -338,19 +338,19 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, uns
     CHECK_NOT_CONNECTED_ERR();
 
     if(!_socket_might_have_data(socket)) {
-        return NSAPI_ERROR_NO_ADDRESS;
+        return NSAPI_ERROR_CONNECTION_LOST;
     }
 
     _spwf.setTimeout(SPWF_RECV_TIMEOUT);
 
     int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size);
 
-    MBED_ASSERT(recv != 0);
+    MBED_ASSERT((recv != 0) || (size == 0));
 
     if (recv < 0) {
         if(!_socket_is_still_connected(socket)) {
             socket->no_more_data = true;
-            return NSAPI_ERROR_NO_ADDRESS;
+            return NSAPI_ERROR_CONNECTION_LOST;
         }
 
         return NSAPI_ERROR_WOULD_BLOCK;

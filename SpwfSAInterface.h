@@ -56,6 +56,8 @@
 
 // Various timeouts for different SPWF operations
 #define SPWF_CONNECT_TIMEOUT    60000
+#define SPWF_DISCONNECT_TIMEOUT 30002
+#define SPWF_HF_TIMEOUT         30001
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_READ_BIN_TIMEOUT   13000
 #define SPWF_SEND_TIMEOUT       10000
@@ -64,8 +66,6 @@
 #define SPWF_OPEN_TIMEOUT       5002
 #define SPWF_CONN_SND_TIMEOUT   5001
 #define SPWF_SCAN_TIMEOUT       5000
-#define SPWF_HF_TIMEOUT         3000
-#define SPWF_DISCONNECT_TIMEOUT 1000
 #define SPWF_MISC_TIMEOUT       301
 #define SPWF_RECV_TIMEOUT       300
 
