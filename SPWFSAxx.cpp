@@ -29,7 +29,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 : _serial(tx, rx, SPWFSAXX_RXBUFFER_SZ, SPWFSAXX_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
   _wakeup(wakeup, 1), _reset(reset, 1),
   _rts(rts), _cts(cts),
-  _timeout(0), _dbg_on(debug),
+  _timeout(SPWF_INIT_TIMEOUT), _dbg_on(debug),
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
@@ -129,7 +129,7 @@ bool SPWFSAxx::startup(int mode)
     _winds_on();
 
     /* sw reset */
-    reset();
+    reset(true);
 
 #ifndef NDEBUG
     /* display all configuration values (only for debug) */
@@ -229,7 +229,7 @@ bool SPWFSAxx::hw_reset(void)
     return true;
 }
 
-bool SPWFSAxx::reset(void)
+bool SPWFSAxx::reset(bool wifi_on)
 {
     /* save current setting in flash */
     if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
@@ -243,7 +243,12 @@ bool SPWFSAxx::reset(void)
                                                                    eventual closing of sockets via "WIND" asynchronous
                                                                    indications! So everything regarding the clean-up
                                                                    of these situations is handled there. */
-    _wait_wifi_hw_started();
+    if(wifi_on) {
+        _wait_wifi_hw_started();
+    } else {
+        _wait_console_active();
+    }
+
     return true;
 }
 
@@ -285,7 +290,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     }
 
     /* sw reset */
-    reset();
+    reset(true);
 
     while(true)
         if(_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4) && _recv_delim_lf())
@@ -299,6 +304,15 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 
 bool SPWFSAxx::disconnect(void)
 {
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    /*disable Wi-Fi device*/
+    if(!(_parser.send("AT+S.WIFI=0") && _recv_ok()))
+    {
+        debug_if(_dbg_on, "\r\nSPWF> error disable WiFi\r\n");
+        return false;
+    }
+#endif // IDW04A1
+
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
@@ -307,7 +321,7 @@ bool SPWFSAxx::disconnect(void)
     }
 
     // reset module
-    reset();
+    reset(false);
 
     return true;
 }
@@ -351,7 +365,7 @@ const char *SPWFSAxx::getNetmask(void)
     unsigned int n1, n2, n3, n4;
 
     if (!(_parser.send("AT+S.STS=ip_netmask")
-            && _parser.recv("SPWFXX_RECV_NETMASK", &n1, &n2, &n3, &n4)
+            && _parser.recv(SPWFXX_RECV_NETMASK, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get netmask error\r\n");
         return NULL;
@@ -855,8 +869,10 @@ void SPWFSAxx::_wifi_hwfault_handler(void)
 #else // NDEBUG
     debug("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 
-    // This is most likely the best we can do to recover from this WiFi radio failure
+    // This is most likely the best we can do to recover from this module hard fault
+    _parser.setTimeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
+    _parser.setTimeout(_timeout);
 #endif // NDEBUG
 
     /* force call of (external) callback */

@@ -44,14 +44,6 @@ public:
     bool startup(int mode);
 
     /**
-     * Reset SPWFSAxx
-     *
-     * @return true only if SPWFSAxx resets successfully
-     */
-    bool hw_reset(void);
-    bool reset(void);
-
-    /**
      * Connect SPWFSAxx to AP
      *
      * @param ap the name of the AP
@@ -103,13 +95,6 @@ public:
     int8_t getRssi();
 
     /**
-     * Check if SPWFSAxx is connected
-     *
-     * @return true only if the chip has an IP address
-     */
-    bool isConnected(void);
-
-    /**
      * Sends data to an open socket
      *
      * @param id id of socket to send to
@@ -145,20 +130,6 @@ public:
     void setTimeout(uint32_t timeout_ms);
 
     /**
-     * Checks if data is available
-     */
-    bool readable(void) {
-        return _serial.readable();
-    }
-
-    /**
-     * Checks if data can be written
-     */
-    bool writeable(void) {
-        return _serial.writeable();
-    }
-
-    /**
      * Attach a function to call whenever network state has changed
      *
      * @param func A pointer to a void function, or 0 to set as none
@@ -192,8 +163,37 @@ private:
     bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
 
+    /**
+     * Reset SPWFSAxx
+     *
+     * @return true only if SPWFSAxx resets successfully
+     */
+    bool hw_reset(void);
+    bool reset(bool wifi_on);
+
+    /**
+     * Check if SPWFSAxx is connected
+     *
+     * @return true only if the chip has an IP address
+     */
+    bool isConnected(void);
+
+    /**
+     * Checks if data is available
+     */
+    bool readable(void) {
+        return _serial.readable();
+    }
+
+    /**
+     * Checks if data can be written
+     */
+    bool writeable(void) {
+        return _serial.writeable();
+    }
+
     /* call (external) callback only while not receiving */
-    bool _call_event_callback_blocked;
+    volatile bool _call_event_callback_blocked;
     Callback<void()> _callback_func;
 
     struct packet {
