@@ -45,6 +45,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(!_parser.recv("AT-S.")) { // get prefix
         debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
+        empty_rx_buffer();
         return false;
     }
 
@@ -65,6 +66,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
                     && _recv_delim_lf()
                     && _recv_ok())) {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                empty_rx_buffer();
                 return false;
             }
             debug_if(_dbg_on, "AT^ AT-S.On:%d\r\n", socket_id);
@@ -77,10 +79,12 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
                 debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, _err_msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                empty_rx_buffer();
             }
             break;
         default:
             debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+            empty_rx_buffer();
             break;
     }
 
@@ -103,6 +107,7 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
         if(!(_parser.recv("AT-S.Reading:%d:%d%*[\x0d]", &received, &cumulative) &&
                 _recv_delim_lf())) {
             debug_if(true, "%s(%d): failed to receive AT-S.Reading\r\n", __func__, __LINE__);
+            empty_rx_buffer();
         } else {
             /* set high timeout */
             _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
@@ -115,9 +120,11 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
                     ret = amount;
                 } else {
                     debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
+                    empty_rx_buffer();
                 }
             } else {
                 debug_if(true, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
+                empty_rx_buffer();
             }
         }
     } else {
@@ -141,7 +148,9 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     /* determine list end */
     curr = _parser.getc();
     if(curr == 'A') { // assume end of list ("AT-S.OK")
-        _parser.recv("T-S.OK%*[\x0d]") && _recv_delim_lf();
+        if(!(_parser.recv("T-S.OK%*[\x0d]") && _recv_delim_lf())) {
+            empty_rx_buffer();
+        }
         return false;
     }
 
@@ -201,6 +210,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
         }
     } else {
         debug("%s - ERROR: Should never happen!\r\n", __func__);
+        empty_rx_buffer();
     }
 
 recv_ap_get_out:
@@ -223,6 +233,7 @@ nsapi_size_or_error_t SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
 
     if(!(_parser.recv("AT-S.Parsing Networks:%u%*[\x0d]", &found) && _recv_delim_lf())) {
         debug_if(true, "SPWF> error start network scanning\r\n");
+        empty_rx_buffer();
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
@@ -239,7 +250,9 @@ nsapi_size_or_error_t SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
             }
         }
     } else {
-        _recv_ok();
+        if(!_recv_ok()) {
+            empty_rx_buffer();
+        }
     }
 
     return cnt;
