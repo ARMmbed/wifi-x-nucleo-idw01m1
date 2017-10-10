@@ -192,6 +192,15 @@ private:
         return _serial.writeable();
     }
 
+    /**
+     * Try to empty RX buffer
+     * Can be used when commands fail receiving expected response to try to recover situation
+     * @note Gives no guarantee that situation improves
+     */
+    void empty_rx_buffer(void) {
+        while(readable()) _parser.getc();
+    }
+
     /* call (external) callback only while not receiving */
     volatile bool _call_event_callback_blocked;
     Callback<void()> _callback_func;

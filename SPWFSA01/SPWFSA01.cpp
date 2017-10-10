@@ -53,6 +53,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(!_recv_delim_lf()) { // Note: this is different to what the spec exactly says
         debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+        empty_rx_buffer();
         return false;
     }
 
@@ -65,6 +66,8 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
                 *spwf_id = socket_id;
                 return true;
+            } else {
+                empty_rx_buffer();
             }
             break;
         case 'E':
@@ -72,6 +75,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
                 debug_if(_dbg_on, "AT^ ERROR: %s (%d)\r\n", _err_msg_buffer, __LINE__);
             } else {
                 debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                empty_rx_buffer();
             }
             break;
         default:
@@ -105,9 +109,11 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
                 ret = amount;
             } else {
                 debug_if(_dbg_on, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
+                empty_rx_buffer();
             }
         } else {
             debug_if(_dbg_on, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
+            empty_rx_buffer();
         }
     } else {
         debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
@@ -188,6 +194,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         }
     } else {
         debug("%s - ERROR: Should never happen!\r\n", __func__);
+        empty_rx_buffer();
     }
 
 recv_ap_get_out:
@@ -219,7 +226,9 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
         }
     }
 
-    _recv_ok();
+    if(!_recv_ok()) {
+        empty_rx_buffer();
+    }
 
     return cnt;
 }
