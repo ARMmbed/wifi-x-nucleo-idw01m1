@@ -172,7 +172,7 @@ bool SPWFSAxx::startup(int mode)
 
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
-        debug_if(true, "\r\nSPWF> error getting console delimiter delimiter\r\n");
+        debug_if(true, "\r\nSPWF> error getting console delimiter\r\n");
         empty_rx_buffer();
         return false;
     }
