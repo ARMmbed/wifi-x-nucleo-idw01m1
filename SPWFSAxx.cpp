@@ -170,9 +170,13 @@ bool SPWFSAxx::startup(int mode)
         return false;
     }
 
+#if (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) || defined(IDW01M1_FW_REL_35X)
+    /* betzw: IDW01M1 FW versions <3.5 seem to have problems with the following two commands.
+     *        For the sake of simplicity, just excluding them for IDW01M1 in general.
+     */
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting console delimiter delimiter\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error getting console delimiter\r\n");
         empty_rx_buffer();
         return false;
     }
@@ -183,6 +187,7 @@ bool SPWFSAxx::startup(int mode)
         empty_rx_buffer();
         return false;
     }
+#endif // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) || defined(IDW01M1_FW_REL_35X)
 
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
