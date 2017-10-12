@@ -6,6 +6,10 @@
 
 ## Configuration examples
 
+### Generic concepts
+
+For the ones, which might be less familiar with the **"The mbed configuration system"** in general, here is a [link](https://docs.mbed.com/docs/mbed-os-handbook/en/latest/advanced/config_system/) which points to the latest version of the respective _mbed OS 5 handbook tutorial_.
+
 ### IDW01M1
 
 Add the following line to the `target_overrides`-section of your `mbed_app.json` file.
@@ -27,7 +31,7 @@ Add the following line to the `target_overrides`-section of your `mbed_app.json`
 
 ### Adding the HW-workaround for IDW04A1
 
-You can add the HW workaround acivation macro to the `macros`-section of your `mbed_app.json` file.
+You can add the HW workaround activation macro to the `macros`-section of your `mbed_app.json` file.
 
 ``` json
     "macros": [..., "IDW04A1_WIFI_HW_BUG_WA"]
