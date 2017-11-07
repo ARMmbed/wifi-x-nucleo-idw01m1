@@ -15,10 +15,6 @@
 #endif // !IDW04A1_WIFI_HW_PATCH
 #endif
 
-#define SPWFSAXX_TX_MULTIPLE (1)
-#define SPWFSAXX_RXBUFFER_SZ (750U)
-#define SPWFSAXX_TXBUFFER_SZ (SPWFSAXX_RXBUFFER_SZ * SPWFSAXX_TX_MULTIPLE)
-
 #define SPWFXX_OOB_ERROR            "AT-S.ERROR:"                                           // "ERROR:"
 
 #define SPWFXX_RECV_OK              "AT-S.OK%*[\x0d]"                                       // "OK%*[\x0d]"
@@ -50,6 +46,5 @@
 
 #define SPWFXX_WINDS_HIGH_ON        "0x00100000"                                            // "0x00000000"
 #define SPWFXX_WINDS_MEDIUM_ON      "0x80000000"                                            // "0x00000000"
-#define SPWFXX_WINDS_LOW_ON         "0x00000000"
 
 #endif // SPWFSAXX_AT_STRINGS_H

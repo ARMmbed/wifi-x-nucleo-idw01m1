@@ -18,7 +18,7 @@
 #define SPWFSAXX_H
 
 #include "mbed.h"
-#include "ATParser.h"
+#include "ATCmdParser.h"
 #include "BlockExecuter.h"
 
 class SpwfSAInterface;
@@ -151,8 +151,8 @@ public:
     static const char _lf_ = '\x0a'; // '\n' line feed
 
 private:
-    BufferedSerial _serial;
-    ATParser _parser;
+    UARTSerial _serial;
+    ATCmdParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
     PinName _rts;
@@ -182,14 +182,14 @@ private:
      * Checks if data is available
      */
     bool readable(void) {
-        return _serial.readable();
+        return _serial.FileHandle::readable();
     }
 
     /**
      * Checks if data can be written
      */
     bool writeable(void) {
-        return _serial.writeable();
+        return _serial.FileHandle::writable();
     }
 
     /**

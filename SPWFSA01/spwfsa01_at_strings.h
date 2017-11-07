@@ -21,10 +21,6 @@
 
 #endif // !defined(TARGET_FF_MORPHO)
 
-#define SPWFSAXX_TX_MULTIPLE (1)
-#define SPWFSAXX_RXBUFFER_SZ (730U)
-#define SPWFSAXX_TXBUFFER_SZ (SPWFSAXX_RXBUFFER_SZ * SPWFSAXX_TX_MULTIPLE)
-
 #define SPWFXX_OOB_ERROR            "ERROR:"                                            // "AT-S.ERROR:"
 
 #define SPWFXX_RECV_OK              "OK%*[\x0d]"                                        // "AT-S.OK%*[\x0d]"
@@ -56,6 +52,5 @@
 
 #define SPWFXX_WINDS_HIGH_ON        "0x00000000"                                        // "0x00100000"
 #define SPWFXX_WINDS_MEDIUM_ON      "0x00000000"                                        // "0x80000000"
-#define SPWFXX_WINDS_LOW_ON         "0x00000000"
 
 #endif // SPWFSAXX_AT_STRINGS_H

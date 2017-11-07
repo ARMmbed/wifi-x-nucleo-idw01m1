@@ -103,18 +103,18 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     }
 
     /* read in data */
-    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
+    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, (unsigned int)amount)) {
         if(!(_parser.recv("AT-S.Reading:%d:%d%*[\x0d]", &received, &cumulative) &&
                 _recv_delim_lf())) {
             debug_if(true, "%s(%d): failed to receive AT-S.Reading\r\n", __func__, __LINE__);
             empty_rx_buffer();
         } else {
             /* set high timeout */
-            _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+            _parser.set_timeout(SPWF_READ_BIN_TIMEOUT);
             /* read in binary data */
             int read = _parser.read(buffer, amount);
             /* reset timeout value */
-            _parser.setTimeout(_timeout);
+            _parser.set_timeout(_timeout);
             if(read > 0) {
                 if(_recv_ok()) {
                     ret = amount;
@@ -186,7 +186,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s%*[\x20]", &buffer)) {
+            if(!_parser.recv("%s%*[\x20]", (char*)&buffer)) {
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
