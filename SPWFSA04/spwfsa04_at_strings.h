@@ -4,6 +4,8 @@
 /* Define beyond macro if your X-NUCLEO-IDW04A1 expansion board has NOT the `WIFI_RST` HW patch applied on it */
 // #define IDW04A1_WIFI_HW_BUG_WA // delegated to mbed config system
 
+#if defined(TARGET_FF_ARDUINO)
+
 #if !defined(SPWFSAXX_WAKEUP_PIN)
 #define SPWFSAXX_WAKEUP_PIN   A3
 #endif
@@ -14,6 +16,17 @@
 #define SPWFSAXX_RESET_PIN    NC
 #endif // !IDW04A1_WIFI_HW_PATCH
 #endif
+
+#else // !defined(TARGET_FF_ARDUINO)
+
+#if !defined(SPWFSAXX_WAKEUP_PIN)
+#define SPWFSAXX_WAKEUP_PIN   NC
+#endif
+#if !defined(SPWFSAXX_RESET_PIN)
+#define SPWFSAXX_RESET_PIN    NC
+#endif
+
+#endif // !defined(TARGET_FF_ARDUINO)
 
 #define SPWFXX_OOB_ERROR            "AT-S.ERROR:"                                           // "ERROR:"
 
