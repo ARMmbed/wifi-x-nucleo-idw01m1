@@ -86,7 +86,7 @@ public:
      * @param reset     Reset pin
      */
     SpwfSAInterface(PinName tx, PinName rx,
-                    PinName rts = NC, PinName cts = NC, bool debug = false,
+                    PinName rts = SPWFSAXX_RTS_PIN, PinName cts = SPWFSAXX_CTS_PIN, bool debug = false,
                     PinName wakeup = SPWFSAXX_WAKEUP_PIN, PinName reset = SPWFSAXX_RESET_PIN);
 
     /** Start the interface

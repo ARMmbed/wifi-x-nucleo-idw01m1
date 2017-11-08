@@ -3,8 +3,7 @@
         "*": {
             "idw0xx1.expansion-board": "IDW01M1",
 	    "drivers.uart-serial-txbuf-size": 730,
-	    "drivers.uart-serial-txbuf-size": 730
+	    "drivers.uart-serial-rxbuf-size": 730
         }
-    },
-    "macros": ["IDW01M1_FW_REL_35X"]
+    }
 }

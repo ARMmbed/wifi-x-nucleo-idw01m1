@@ -3,7 +3,7 @@
         "*": {
             "idw0xx1.expansion-board": "IDW04A1",
 	    "drivers.uart-serial-txbuf-size": 750,
-	    "drivers.uart-serial-txbuf-size": 750
+	    "drivers.uart-serial-rxbuf-size": 750
         }
     },
     "macros": ["IDW04A1_WIFI_HW_BUG_WA"]

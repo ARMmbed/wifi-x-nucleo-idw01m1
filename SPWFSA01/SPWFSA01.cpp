@@ -60,7 +60,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     value = _parser.getc();
     switch(value) {
         case ' ':
-            if(_parser.recv("ID: %d%*[\x0d]", &socket_id)
+            if(_parser.recv("ID: %d\n", &socket_id)
                     && _recv_ok()) {
                 debug_if(_dbg_on, "AT^  ID: %d\r\n", socket_id);
 
@@ -71,7 +71,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         case 'E':
-            if(_parser.recv("RROR: %[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {
+            if(_parser.recv("RROR: %[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {
                 debug_if(true, "AT^ ERROR: %s (%d)\r\n", _err_msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);

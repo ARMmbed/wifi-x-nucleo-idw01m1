@@ -21,6 +21,17 @@
 #include "ATCmdParser.h"
 #include "BlockExecuter.h"
 
+/* Common SPWFSAxx macros */
+#define SPWFXX_WINDS_LOW_ON         "0x00000000"
+#define SPWFXX_DEFAULT_BAUD_RATE    115200
+
+#if !defined(SPWFSAXX_RTS_PIN)
+#define SPWFSAXX_RTS_PIN    NC
+#endif // !defined(SPWFSAXX_RTS_PIN)
+#if !defined(SPWFSAXX_CTS_PIN)
+#define SPWFSAXX_CTS_PIN    NC
+#endif // !defined(SPWFSAXX_CTS_PIN)
+
 class SpwfSAInterface;
 
 /** SPWFSAxx Interface class.
