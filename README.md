@@ -10,7 +10,7 @@
 
 For the ones, which might be less familiar with the **"The mbed configuration system"** in general, here is a [link](https://docs.mbed.com/docs/mbed-os-handbook/en/latest/advanced/config_system/) which points to the latest version of the respective _mbed OS 5 handbook tutorial_.
 
-Furthermore, with respect to this driver, pls. refer to files `mbed_app_idw01m1.json` and `mbed_app_idw04a1.json` for additional reference for what is explained next.
+Furthermore, with respect to this driver, pls. refer to files [`mbed_app_idw01m1.json`](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_app_idw01m1.json) and [`mbed_app_idw04a1.json`](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_app_idw04a1.json) for additional reference for what is explained beyond.
 
 ### IDW01M1
 
@@ -22,7 +22,7 @@ Add the following lines to the `target_overrides`-section of your `mbed_app.json
             "drivers.uart-serial-rxbuf-size": 730
 ```
 
-`IDW01M1` is the default value in the [mbed_lib.json](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_lib.json), so this setting the expansion board is not mandatory for `IDW01M1`, while setting the TX & RX buffer sizes is highly recommended.
+`IDW01M1` is the default value in the [`mbed_lib.json`](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_lib.json), so this setting the expansion board is not mandatory for `IDW01M1`, while setting the TX & RX buffer sizes is highly recommended.
 
 ### IDW04A1
 
