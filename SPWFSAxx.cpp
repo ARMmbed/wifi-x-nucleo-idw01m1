@@ -19,14 +19,13 @@
 #include "SpwfSAInterface.h" /* must be included first */
 #include "SPWFSAxx.h"
 
-static const char recv_delim[] = {SPWFSAxx::_lf_, '\0'};
-static const char send_delim[] = {SPWFSAxx::_cr_, '\0'};
+static const char out_delim[] = {SPWFSAxx::_cr_, '\0'};
 
 SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
                    PinName rts, PinName cts,
                    SpwfSAInterface &ifce, bool debug,
                    PinName wakeup, PinName reset)
-: _serial(tx, rx, SPWFSAXX_RXBUFFER_SZ, SPWFSAXX_TX_MULTIPLE), _parser(_serial, recv_delim, send_delim),
+: _serial(tx, rx, SPWFXX_DEFAULT_BAUD_RATE), _parser(&_serial, out_delim),
   _wakeup(wakeup, 1), _reset(reset, 1),
   _rts(rts), _cts(cts),
   _timeout(SPWF_INIT_TIMEOUT), _dbg_on(debug),
@@ -38,16 +37,16 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _packets(0), _packets_end(&_packets),
   _err_msg_buffer(ssid_buf)
 {
-    _serial.baud(115200);
-    _serial.attach(Callback<void()>(this, &SPWFSAxx::_event_handler));
-    _parser.debugOn(debug);
+    _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
+    _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
+    _parser.debug_on(debug);
 
-    _parser.oob("+WIND:55:Pending Data", this, &SPWFSAxx::_packet_handler_th);
-    _parser.oob("+WIND:58:Socket Closed", this, &SPWFSAxx::_server_gone_handler);
-    _parser.oob("+WIND:33:WiFi Network Lost", this, &SPWFSAxx::_network_lost_handler_th);
-    _parser.oob("+WIND:8:Hard Fault", this, &SPWFSAxx::_hard_fault_handler);
-    _parser.oob("+WIND:5:WiFi Hardware Failure", this, &SPWFSAxx::_wifi_hwfault_handler);
-    _parser.oob(SPWFXX_OOB_ERROR, this, &SPWFSAxx::_error_handler);
+    _parser.oob("+WIND:55:Pending Data", callback(this, &SPWFSAxx::_packet_handler_th));
+    _parser.oob("+WIND:58:Socket Closed", callback(this, &SPWFSAxx::_server_gone_handler));
+    _parser.oob("+WIND:33:WiFi Network Lost", callback(this, &SPWFSAxx::_network_lost_handler_th));
+    _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
+    _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
+    _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
 }
 
 bool SPWFSAxx::startup(int mode)
@@ -141,14 +140,6 @@ bool SPWFSAxx::startup(int mode)
     reset(true);
 
 #ifndef NDEBUG
-    /* display all configuration values (only for debug) */
-    if(!(_parser.send(SPWFXX_SEND_DSPLY_CFGV) && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\nSPWF> error displaying all config vars\r\n");
-        empty_rx_buffer();
-        return false;
-    }
-
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting console state\r\n");
@@ -209,14 +200,6 @@ bool SPWFSAxx::startup(int mode)
         empty_rx_buffer();
         return false;
     }
-
-   /* display the current values of all the status variables (only for debug) */
-    if(!(_parser.send("AT+S.STS") && _recv_ok()))
-    {
-        debug_if(_dbg_on, "\r\nSPWF> error displaying all status vars\r\n");
-        empty_rx_buffer();
-        return false;
-    }
 #endif
 
     return true;
@@ -224,7 +207,7 @@ bool SPWFSAxx::startup(int mode)
 
 void SPWFSAxx::_wait_console_active(void) {
     while(true) {
-        if (_parser.recv("+WIND:0:Console active%*[\x0d]") && _recv_delim_lf()) {
+        if (_parser.recv("+WIND:0:Console active\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
             empty_rx_buffer();
             return;
@@ -234,7 +217,7 @@ void SPWFSAxx::_wait_console_active(void) {
 
 void SPWFSAxx::_wait_wifi_hw_started(void) {
     while(true) {
-        if (_parser.recv("+WIND:32:WiFi Hardware Started%*[\x0d]") && _recv_delim_lf()) {
+        if (_parser.recv("+WIND:32:WiFi Hardware Started\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
             empty_rx_buffer();
             return;
@@ -286,7 +269,7 @@ bool SPWFSAxx::reset(bool wifi_on)
  */
 bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 {
-    uint32_t n1, n2, n3, n4;
+    unsigned int n1, n2, n3, n4;
 
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
@@ -456,9 +439,9 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > SPWFSAXX_TXBUFFER_SZ) ? SPWFSAXX_TXBUFFER_SZ : amount;
+    for(to_send = (amount > MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE) ? MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE : amount;
             sent < amount;
-            to_send = ((amount - sent) > SPWFSAXX_TXBUFFER_SZ) ? SPWFSAXX_TXBUFFER_SZ : (amount - sent)) {
+            to_send = ((amount - sent) > MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE) ? MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE : (amount - sent)) {
         {
             BH_HANDLER;
 
@@ -479,7 +462,7 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
 }
 
 int SPWFSAxx::_read_len(int spwf_id) {
-    uint32_t amount;
+    unsigned int amount;
 
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(SPWFXX_RECV_DATALEN, &amount)
@@ -768,7 +751,7 @@ void SPWFSAxx::_event_handler(void)
  */
 void SPWFSAxx::_error_handler(void)
 {
-    if(_parser.recv("%[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {
+    if(_parser.recv("%[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {
         debug_if(_dbg_on, "AT^ ERROR:%s (%d)\r\n", _err_msg_buffer, __LINE__);
     } else {
         debug_if(_dbg_on, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
@@ -841,13 +824,13 @@ void SPWFSAxx::_network_lost_handler_bh(void)
         Timer timer;
         timer.start();
 
-        _parser.setTimeout(SPWF_NETLOST_TIMEOUT);
+        _parser.set_timeout(SPWF_NETLOST_TIMEOUT);
 
         were_connected = isConnected();
         _associated_interface._connected_to_network = false;
 
         if(were_connected) {
-            uint32_t n1, n2, n3, n4;
+            unsigned int n1, n2, n3, n4;
 
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
@@ -870,7 +853,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
     nlh_get_out:
         debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
-        _parser.setTimeout(_timeout);
+        _parser.set_timeout(_timeout);
 
         return;
     }
@@ -891,8 +874,8 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
  */
 void SPWFSAxx::_hard_fault_handler(void)
 {
-    _parser.setTimeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%[^\x0d]%*[\x0d]", _err_msg_buffer) && _recv_delim_lf()) {}
+    _parser.set_timeout(SPWF_RECV_TIMEOUT);
+    if(_parser.recv("%[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
     error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
@@ -900,9 +883,9 @@ void SPWFSAxx::_hard_fault_handler(void)
     debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
 
     // This is most likely the best we can do to recover from this module hard fault
-    _parser.setTimeout(SPWF_HF_TIMEOUT);
+    _parser.set_timeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
-    _parser.setTimeout(_timeout);
+    _parser.set_timeout(_timeout);
 #endif // NDEBUG
 
     /* force call of (external) callback */
@@ -917,7 +900,7 @@ void SPWFSAxx::_wifi_hwfault_handler(void)
     unsigned int failure_nr;
 
     /* parse out the socket id & amount */
-    _parser.recv(":%u%*[\x0d]", &failure_nr);
+    _parser.recv(":%u\n", &failure_nr);
     _recv_delim_lf();
 
 #ifndef NDEBUG
@@ -926,9 +909,9 @@ void SPWFSAxx::_wifi_hwfault_handler(void)
     debug("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this module hard fault
-    _parser.setTimeout(SPWF_HF_TIMEOUT);
+    _parser.set_timeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
-    _parser.setTimeout(_timeout);
+    _parser.set_timeout(_timeout);
 #endif // NDEBUG
 
     /* force call of (external) callback */
@@ -974,7 +957,7 @@ _get_out:
 void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 {
     _timeout = timeout_ms;
-    _parser.setTimeout(timeout_ms);
+    _parser.set_timeout(timeout_ms);
 }
 
 void SPWFSAxx::attach(Callback<void()> func)

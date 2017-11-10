@@ -62,7 +62,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             }
 
             /* get socket id */
-            if(!(_parser.recv(":%*u.%*u.%*u.%*u:%d%*[\x0d]", &socket_id)
+            if(!(_parser.recv(":%*u.%*u.%*u.%*u:%d\n", &socket_id)
                     && _recv_delim_lf()
                     && _recv_ok())) {
                 debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
@@ -75,7 +75,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             return true;
         case 'E':
             int err_nr;
-            if(_parser.recv("RROR:%d:%[^\x0d]%*[\x0d]", &err_nr, _err_msg_buffer) && _recv_delim_lf()) {
+            if(_parser.recv("RROR:%d:%[^\n]\n", &err_nr, _err_msg_buffer) && _recv_delim_lf()) {
                 debug_if(_dbg_on, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, _err_msg_buffer, __LINE__);
             } else {
                 debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
@@ -103,18 +103,18 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     }
 
     /* read in data */
-    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, amount)) {
-        if(!(_parser.recv("AT-S.Reading:%d:%d%*[\x0d]", &received, &cumulative) &&
+    if(_parser.send("AT+S.SOCKR=%d,%d", spwf_id, (unsigned int)amount)) {
+        if(!(_parser.recv("AT-S.Reading:%d:%d\n", &received, &cumulative) &&
                 _recv_delim_lf())) {
             debug_if(_dbg_on, "%s(%d): failed to receive AT-S.Reading\r\n", __func__, __LINE__);
             empty_rx_buffer();
         } else {
             /* set high timeout */
-            _parser.setTimeout(SPWF_READ_BIN_TIMEOUT);
+            _parser.set_timeout(SPWF_READ_BIN_TIMEOUT);
             /* read in binary data */
             int read = _parser.read(buffer, amount);
             /* reset timeout value */
-            _parser.setTimeout(_timeout);
+            _parser.set_timeout(_timeout);
             if(read > 0) {
                 if(_recv_ok()) {
                     ret = amount;
@@ -148,7 +148,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     /* determine list end */
     curr = _parser.getc();
     if(curr == 'A') { // assume end of list ("AT-S.OK")
-        if(!(_parser.recv("T-S.OK%*[\x0d]") && _recv_delim_lf())) {
+        if(!(_parser.recv("T-S.OK\n") && _recv_delim_lf())) {
             empty_rx_buffer();
         }
         return false;
@@ -186,7 +186,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s%*[\x20]", &buffer)) {
+            if(!_parser.recv("%s%*[\x20]", (char*)&buffer)) {
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
@@ -231,7 +231,7 @@ nsapi_size_or_error_t SPWFSA04::scan(WiFiAccessPoint *res, unsigned limit)
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    if(!(_parser.recv("AT-S.Parsing Networks:%u%*[\x0d]", &found) && _recv_delim_lf())) {
+    if(!(_parser.recv("AT-S.Parsing Networks:%u\n", &found) && _recv_delim_lf())) {
         debug_if(_dbg_on, "SPWF> error start network scanning\r\n");
         empty_rx_buffer();
         return NSAPI_ERROR_DEVICE_ERROR;

@@ -18,8 +18,19 @@
 #define SPWFSAXX_H
 
 #include "mbed.h"
-#include "ATParser.h"
+#include "ATCmdParser.h"
 #include "BlockExecuter.h"
+
+/* Common SPWFSAxx macros */
+#define SPWFXX_WINDS_LOW_ON         "0x00000000"
+#define SPWFXX_DEFAULT_BAUD_RATE    115200
+
+#if !defined(SPWFSAXX_RTS_PIN)
+#define SPWFSAXX_RTS_PIN    NC
+#endif // !defined(SPWFSAXX_RTS_PIN)
+#if !defined(SPWFSAXX_CTS_PIN)
+#define SPWFSAXX_CTS_PIN    NC
+#endif // !defined(SPWFSAXX_CTS_PIN)
 
 class SpwfSAInterface;
 
@@ -151,8 +162,8 @@ public:
     static const char _lf_ = '\x0a'; // '\n' line feed
 
 private:
-    BufferedSerial _serial;
-    ATParser _parser;
+    UARTSerial _serial;
+    ATCmdParser _parser;
     DigitalOut _wakeup;
     DigitalOut _reset;
     PinName _rts;
@@ -182,14 +193,14 @@ private:
      * Checks if data is available
      */
     bool readable(void) {
-        return _serial.readable();
+        return _serial.FileHandle::readable();
     }
 
     /**
      * Checks if data can be written
      */
     bool writeable(void) {
-        return _serial.writeable();
+        return _serial.FileHandle::writable();
     }
 
     /**

@@ -15,22 +15,18 @@
 #endif // !IDW04A1_WIFI_HW_PATCH
 #endif
 
-#define SPWFSAXX_TX_MULTIPLE (1)
-#define SPWFSAXX_RXBUFFER_SZ (750U)
-#define SPWFSAXX_TXBUFFER_SZ (SPWFSAXX_RXBUFFER_SZ * SPWFSAXX_TX_MULTIPLE)
-
 #define SPWFXX_OOB_ERROR            "AT-S.ERROR:"                                           // "ERROR:"
 
-#define SPWFXX_RECV_OK              "AT-S.OK%*[\x0d]"                                       // "OK%*[\x0d]"
-#define SPWFXX_RECV_WIFI_UP         "+WIND:24:WiFi Up:%*u:%u.%u.%u.%u%*[\x0d]"              // "+WIND:24:WiFi Up:%u.%u.%u.%u%*[\x0d]"
-#define SPWFXX_RECV_IP_ADDR         "AT-S.Var:ip_ipaddr=%u.%u.%u.%u%*[\x0d]"                // "#  ip_ipaddr = %u.%u.%u.%u%*[\x0d]"
-#define SPWFXX_RECV_GATEWAY         "AT-S.Var:ip_gw=%u.%u.%u.%u%*[\x0d]"                    // "#  ip_gw = %u.%u.%u.%u%*[\x0d]"
-#define SPWFXX_RECV_NETMASK         "AT-S.Var:ip_netmask=%u.%u.%u.%u%*[\x0d]"               // "#  ip_netmask = %u.%u.%u.%u%*[\x0d]"
-#define SPWFXX_RECV_RX_RSSI         "AT-S.Var:0.rx_rssi=%d%*[\x0d]"                         // "#  0.rx_rssi = %d%*[\x0d]"
-#define SPWFXX_RECV_MAC_ADDR        "AT-S.Var:nv_wifi_macaddr=%x:%x:%x:%x:%x:%x%*[\x0d]"    // "#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x%*[\x0d]"
-#define SPWFXX_RECV_DATALEN         "AT-S.Query:%u%*[\x0d]"                                 // " DATALEN: %u%*[\x0d]"
-#define SPWFXX_RECV_PENDING_DATA    "::%u:%*u:%u%*[\x0d]"                                   // ":%d:%d%*[\x0d]"
-#define SPWFXX_RECV_SOCKET_CLOSED   ":%u:%*u%*[\x0d]"                                       // ":%d%*[\x0d]"
+#define SPWFXX_RECV_OK              "AT-S.OK\n"                                             // "OK\n"
+#define SPWFXX_RECV_WIFI_UP         "+WIND:24:WiFi Up:%*u:%u.%u.%u.%u\n"                    // "+WIND:24:WiFi Up:%u.%u.%u.%u\n"
+#define SPWFXX_RECV_IP_ADDR         "AT-S.Var:ip_ipaddr=%u.%u.%u.%u\n"                      // "#  ip_ipaddr = %u.%u.%u.%u\n"
+#define SPWFXX_RECV_GATEWAY         "AT-S.Var:ip_gw=%u.%u.%u.%u\n"                          // "#  ip_gw = %u.%u.%u.%u\n"
+#define SPWFXX_RECV_NETMASK         "AT-S.Var:ip_netmask=%u.%u.%u.%u\n"                     // "#  ip_netmask = %u.%u.%u.%u\n"
+#define SPWFXX_RECV_RX_RSSI         "AT-S.Var:0.rx_rssi=%d\n"                               // "#  0.rx_rssi = %d\n"
+#define SPWFXX_RECV_MAC_ADDR        "AT-S.Var:nv_wifi_macaddr=%x:%x:%x:%x:%x:%x\n"          // "#  nv_wifi_macaddr = %x:%x:%x:%x:%x:%x\n"
+#define SPWFXX_RECV_DATALEN         "AT-S.Query:%u\n"                                       // " DATALEN: %u\n"
+#define SPWFXX_RECV_PENDING_DATA    "::%u:%*u:%u\n"                                         // ":%d:%d\n"
+#define SPWFXX_RECV_SOCKET_CLOSED   ":%u:%*u\n"                                             // ":%d\n"
 
 #define SPWFXX_SEND_FWCFG           "AT+S.FCFG"                                             // "AT&F"
 #define SPWFXX_SEND_DISABLE_LE      "AT+S.SCFG=console_echo,0"                              // "AT+S.SCFG=localecho1,0"
@@ -50,6 +46,5 @@
 
 #define SPWFXX_WINDS_HIGH_ON        "0x00100000"                                            // "0x00000000"
 #define SPWFXX_WINDS_MEDIUM_ON      "0x80000000"                                            // "0x00000000"
-#define SPWFXX_WINDS_LOW_ON         "0x00000000"
 
 #endif // SPWFSAXX_AT_STRINGS_H

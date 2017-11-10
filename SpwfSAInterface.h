@@ -61,7 +61,7 @@
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_READ_BIN_TIMEOUT   13000
 #define SPWF_SEND_TIMEOUT       10000
-#define SPWF_INIT_TIMEOUT       6000
+#define SPWF_INIT_TIMEOUT       8000
 #define SPWF_CLOSE_TIMEOUT      5003
 #define SPWF_OPEN_TIMEOUT       5002
 #define SPWF_CONN_SND_TIMEOUT   5001
@@ -86,7 +86,7 @@ public:
      * @param reset     Reset pin
      */
     SpwfSAInterface(PinName tx, PinName rx,
-                    PinName rts = NC, PinName cts = NC, bool debug = false,
+                    PinName rts = SPWFSAXX_RTS_PIN, PinName cts = SPWFSAXX_CTS_PIN, bool debug = false,
                     PinName wakeup = SPWFSAXX_WAKEUP_PIN, PinName reset = SPWFSAXX_RESET_PIN);
 
     /** Start the interface
