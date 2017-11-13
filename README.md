@@ -22,7 +22,7 @@ Add the following lines to the `target_overrides`-section of your `mbed_app.json
             "drivers.uart-serial-rxbuf-size": 730
 ```
 
-`IDW01M1` is the default value in the [`mbed_lib.json`](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_lib.json), so this setting the expansion board is not mandatory for `IDW01M1`, while setting the TX & RX buffer sizes is highly recommended.
+`IDW01M1` is the default value in the [`mbed_lib.json`](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/blob/master/mbed_lib.json) file, so setting the expansion board is not mandatory for `IDW01M1`, while setting the TX & RX buffer sizes is highly recommended.
 
 ### IDW04A1
 
