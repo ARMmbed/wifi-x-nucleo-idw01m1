@@ -102,7 +102,8 @@ bool SPWFSAxx::startup(int mode)
         return false;
     }
 
-#if !DEVICE_SERIAL_FC
+#if defined(MBED_MAJOR_VERSION)
+#if !DEVICE_SERIAL_FC || (MBED_VERSION < MBED_ENCODE_VERSION(5, 7, 0))
     /*disable HW flow control*/
     if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
@@ -110,7 +111,7 @@ bool SPWFSAxx::startup(int mode)
         empty_rx_buffer();
         return false;
     }
-#else
+#else // DEVICE_SERIAL_FC && (MBED_VERSION >= MBED_ENCODE_VERSION(5, 7, 0))
     if((_rts != NC) && (_cts != NC)) {
         /*enable HW flow control*/
         if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
@@ -131,7 +132,39 @@ bool SPWFSAxx::startup(int mode)
             return false;
         }
     }
-#endif
+#endif // DEVICE_SERIAL_FC && (MBED_VERSION >= MBED_ENCODE_VERSION(5, 7, 0))
+#else // !defined(MBED_MAJOR_VERSION) - Assuming `master` branch
+#if !DEVICE_SERIAL_FC
+    /*disable HW flow control*/
+    if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
+        empty_rx_buffer();
+        return false;
+    }
+#else // DEVICE_SERIAL_FC
+    if((_rts != NC) && (_cts != NC)) {
+        /*enable HW flow control*/
+        if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
+        {
+            debug_if(true, "\r\nSPWF> error enabling HW flow control\r\n");
+            empty_rx_buffer();
+            return false;
+        }
+
+        /*configure pins for HW flow control*/
+        _serial.set_flow_control(SerialBase::RTSCTS, _rts, _cts);
+    } else {
+        /*disable HW flow control*/
+        if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
+        {
+            debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
+            empty_rx_buffer();
+            return false;
+        }
+    }
+#endif // DEVICE_SERIAL_FC
+#endif // !defined(MBED_MAJOR_VERSION)
 
     /* Disable selected WINDs */
     _winds_on();
