@@ -58,7 +58,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send(SPWFXX_SEND_FWCFG) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error restore factory default settings\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -66,7 +65,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send("AT+S.SCFG=blink_led,0") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error stop blinking led (%d)\r\n", __LINE__);
-        empty_rx_buffer();
         return false;
     }
 
@@ -74,7 +72,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send(SPWFXX_SEND_DISABLE_LE) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -82,7 +79,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -90,7 +86,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error setting operational rates\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -98,7 +93,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
-        empty_rx_buffer();
         return false;
     }
 
@@ -108,7 +102,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
-        empty_rx_buffer();
         return false;
     }
 #else // DEVICE_SERIAL_FC && (MBED_VERSION >= MBED_ENCODE_VERSION(5, 7, 0))
@@ -117,7 +110,6 @@ bool SPWFSAxx::startup(int mode)
         if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
-            empty_rx_buffer();
             return false;
         }
 
@@ -128,7 +120,6 @@ bool SPWFSAxx::startup(int mode)
         if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
-            empty_rx_buffer();
             return false;
         }
     }
@@ -139,7 +130,6 @@ bool SPWFSAxx::startup(int mode)
     if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
-        empty_rx_buffer();
         return false;
     }
 #else // DEVICE_SERIAL_FC
@@ -148,7 +138,6 @@ bool SPWFSAxx::startup(int mode)
         if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
-            empty_rx_buffer();
             return false;
         }
 
@@ -159,7 +148,6 @@ bool SPWFSAxx::startup(int mode)
         if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
         {
             debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
-            empty_rx_buffer();
             return false;
         }
     }
@@ -176,21 +164,18 @@ bool SPWFSAxx::startup(int mode)
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting console state\r\n");
-        empty_rx_buffer();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_SPEED)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting console speed\r\n");
-        empty_rx_buffer();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_HWFC_STATE)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting hwfc state\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -201,14 +186,12 @@ bool SPWFSAxx::startup(int mode)
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting console delimiter\r\n");
-        empty_rx_buffer();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_ERRS)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting console error setting\r\n");
-        empty_rx_buffer();
         return false;
     }
 #endif // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) || defined(IDW01M1_FW_REL_35X)
@@ -216,21 +199,18 @@ bool SPWFSAxx::startup(int mode)
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting sleep state enabled\r\n");
-        empty_rx_buffer();
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=wifi_powersave")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting powersave mode\r\n");
-        empty_rx_buffer();
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> error getting standby state enabled\r\n");
-        empty_rx_buffer();
         return false;
     }
 #endif
@@ -242,7 +222,6 @@ void SPWFSAxx::_wait_console_active(void) {
     while(true) {
         if (_parser.recv("+WIND:0:Console active\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
-            empty_rx_buffer();
             return;
         }
     }
@@ -252,7 +231,6 @@ void SPWFSAxx::_wait_wifi_hw_started(void) {
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
-            empty_rx_buffer();
             return;
         }
     }
@@ -277,7 +255,6 @@ bool SPWFSAxx::reset(bool wifi_on)
     if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error saving configuration to flash\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -308,7 +285,6 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error pass set\r\n");
-        empty_rx_buffer();
         return false;
     } 
 
@@ -316,7 +292,6 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error ssid set\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -324,7 +299,6 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error security mode set\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -332,7 +306,6 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error wifi mode set 1 (STA)\r\n");
-        empty_rx_buffer();
         return false;
     }
 
@@ -356,7 +329,6 @@ bool SPWFSAxx::disconnect(void)
     if(!(_parser.send("AT+S.WIFI=0") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error disable WiFi\r\n");
-        empty_rx_buffer();
         return false;
     }
 #endif // IDW04A1
@@ -365,7 +337,6 @@ bool SPWFSAxx::disconnect(void)
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
-        empty_rx_buffer();
         return false;
     }
 
@@ -383,7 +354,6 @@ const char *SPWFSAxx::getIPAddress(void)
             && _parser.recv(SPWFXX_RECV_IP_ADDR, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get IP address error\r\n");
-        empty_rx_buffer();
         return NULL;
     }
 
@@ -401,7 +371,6 @@ const char *SPWFSAxx::getGateway(void)
             && _parser.recv(SPWFXX_RECV_GATEWAY, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get gateway error\r\n");
-        empty_rx_buffer();
         return NULL;
     }
 
@@ -419,7 +388,6 @@ const char *SPWFSAxx::getNetmask(void)
             && _parser.recv(SPWFXX_RECV_NETMASK, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get netmask error\r\n");
-        empty_rx_buffer();
         return NULL;
     }
 
@@ -437,7 +405,6 @@ int8_t SPWFSAxx::getRssi(void)
             && _parser.recv(SPWFXX_RECV_RX_RSSI, &ret)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get RX rssi error\r\n");
-        empty_rx_buffer();
         return 0;
     }
 
@@ -452,7 +419,6 @@ const char *SPWFSAxx::getMACAddress(void)
             && _parser.recv(SPWFXX_RECV_MAC_ADDR, &n1, &n2, &n3, &n4, &n5, &n6)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> get MAC address error\r\n");
-        empty_rx_buffer();
         return 0;
     }
 
@@ -483,7 +449,6 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
                     && _recv_ok())) {
                 // betzw - TODO: handle different errors more accurately!
                 ret = false;
-                empty_rx_buffer();
                 break;
             }
         }
@@ -501,7 +466,6 @@ int SPWFSAxx::_read_len(int spwf_id) {
             && _parser.recv(SPWFXX_RECV_DATALEN, &amount)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> %s failed\r\n", __func__);
-        empty_rx_buffer();
         return 0;
     }
 
@@ -512,13 +476,10 @@ int SPWFSAxx::_read_len(int spwf_id) {
 
 void SPWFSAxx::_winds_on(void) {
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
-        empty_rx_buffer();
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok())) {
-        empty_rx_buffer();
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok())) {
-        empty_rx_buffer();
     }
 }
 
@@ -526,21 +487,18 @@ void SPWFSAxx::_winds_on(void) {
 bool SPWFSAxx::_winds_off(void) {
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        empty_rx_buffer();
         _winds_on();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        empty_rx_buffer();
         _winds_on();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        empty_rx_buffer();
         _winds_on();
         return false;
     }
@@ -739,8 +697,6 @@ close_flush:
     } else {
         if(retry_cnt++ < CLOSE_MAX_RETRY) {
             debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
-            empty_rx_buffer();
-
             /* interleave bottom halves */
             _execute_bottom_halves();
 

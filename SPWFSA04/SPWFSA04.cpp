@@ -58,6 +58,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             value = _parser.getc();
             if(value != 'n') {
                 debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                empty_rx_buffer();
                 return false;
             }
 
