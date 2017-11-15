@@ -250,7 +250,11 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 
     const char *proto = (socket->proto == NSAPI_UDP) ? "u" : "t"; //"s" for secure socket?
 
-    if (!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
+    if(addr.get_ip_version() != NSAPI_IPv4) { // IPv6 not supported (yet)
+        return NSAPI_ERROR_UNSUPPORTED;
+    }
+
+    if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 

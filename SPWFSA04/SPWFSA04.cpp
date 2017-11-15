@@ -70,7 +70,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
                 empty_rx_buffer();
                 return false;
             }
-            debug_if(_dbg_on, "AT^ AT-S.On:%d\r\n", socket_id);
+            debug_if(_dbg_on, "AT^ AT-S.On:%s:%d\r\n", addr, socket_id);
 
             *spwf_id = socket_id;
             return true;
