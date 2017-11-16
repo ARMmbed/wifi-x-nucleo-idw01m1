@@ -268,7 +268,7 @@ bool SPWFSAxx::hw_reset(void)
     return _wait_console_active();
 }
 
-bool SPWFSAxx::reset()
+bool SPWFSAxx::reset(void)
 {
     bool ret;
 
@@ -555,9 +555,9 @@ void SPWFSAxx::_read_in_pending(void) {
     static int internal_id_cnt = 0;
 
     while(_is_data_pending()) {
-        if(_associated_interface._socket_has_connected(internal_id_cnt)) {
-            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
+        int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
 
+        if(_associated_interface._socket_has_connected(internal_id_cnt)) {
             if(_is_data_pending(spwf_id)) {
                 int amount;
 
@@ -821,7 +821,7 @@ void SPWFSAxx::_network_lost_handler_th(void)
  */
 void SPWFSAxx::_packet_handler_th(void)
 {
-    int spwf_id;
+    int internal_id, spwf_id;
     int amount;
 
     /* parse out the socket id & amount */
@@ -838,7 +838,12 @@ void SPWFSAxx::_packet_handler_th(void)
     /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
      *       therefore we just record the socket id without considering the `amount` of data reported!
      */
-    _set_pending_data(spwf_id);
+    internal_id = _associated_interface.get_internal_id(spwf_id);
+    if(internal_id != SPWFSA_SOCKET_COUNT) {
+        _set_pending_data(spwf_id);
+    } else {
+        debug_if(true, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
+    }
 }
 
 void SPWFSAxx::_network_lost_handler_bh(void)

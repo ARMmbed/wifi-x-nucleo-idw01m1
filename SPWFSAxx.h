@@ -181,7 +181,7 @@ private:
      * @return true only if SPWFSAxx resets successfully
      */
     bool hw_reset(void);
-    bool reset();
+    bool reset(void);
 
     /**
      * Check if SPWFSAxx is connected
