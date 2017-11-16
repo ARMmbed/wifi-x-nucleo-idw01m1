@@ -24,6 +24,7 @@
 /* Common SPWFSAxx macros */
 #define SPWFXX_WINDS_LOW_ON         "0x00000000"
 #define SPWFXX_DEFAULT_BAUD_RATE    115200
+#define SPWFXX_MAX_TRIALS           100
 
 #if !defined(SPWFSAXX_RTS_PIN)
 #define SPWFSAXX_RTS_PIN    NC
@@ -180,7 +181,7 @@ private:
      * @return true only if SPWFSAxx resets successfully
      */
     bool hw_reset(void);
-    bool reset(bool wifi_on);
+    bool reset();
 
     /**
      * Check if SPWFSAxx is connected
@@ -230,8 +231,8 @@ private:
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
     void _server_gone_handler(void);
-    void _wait_wifi_hw_started(void);
-    void _wait_console_active(void);
+    bool _wait_wifi_hw_started(void);
+    bool _wait_console_active(void);
     int _read_len(int);
     int _flush_in(char*, int);
     bool _winds_off(void);

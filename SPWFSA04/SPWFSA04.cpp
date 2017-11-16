@@ -31,11 +31,12 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
     int value;
+    int cnt;
     BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,NULL,%s", addr, port, type))
     {
-        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -50,14 +51,21 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
     }
 
     /* wait for next character */
-    while((value = _parser.getc()) < 0);
+    cnt = 0;
+    while((value = _parser.getc()) < 0) {
+        if(cnt++ > SPWFXX_MAX_TRIALS) {
+            debug("\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
+            empty_rx_buffer();
+            return false;
+        }
+    }
 
     switch(value) {
         case 'O':
             /* get next character */
             value = _parser.getc();
             if(value != 'n') {
-                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
                 return false;
             }
@@ -66,7 +74,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             if(!(_parser.recv(":%*u.%*u.%*u.%*u:%d\n", &socket_id)
                     && _recv_delim_lf()
                     && _recv_ok())) {
-                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
                 return false;
             }
@@ -79,12 +87,12 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             if(_parser.recv("RROR:%d:%[^\n]\n", &err_nr, _err_msg_buffer) && _recv_delim_lf()) {
                 debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, _err_msg_buffer, __LINE__);
             } else {
-                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
             }
             break;
         default:
-            debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+            debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
             empty_rx_buffer();
             break;
     }
@@ -143,6 +151,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     bool ret;
     int curr;
     unsigned int channel;
+    int cnt;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
@@ -156,14 +165,21 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
     /* run to 'horizontal tab' */
-    while(_parser.getc() != '\x09');
+    cnt = 0;
+    while(_parser.getc() != '\x09') {
+        if(cnt++ > SPWFXX_MAX_TRIALS) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            empty_rx_buffer();
+            return false;
+        }
+    }
 
     /* read in next line */
     ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);
 
-    if(ret) {
+    if(ret) { // ret == true
         int value;
 
         /* copy values */
@@ -209,15 +225,23 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
                 goto recv_ap_get_out;
             }
         }
-    } else {
-        debug("%s - ERROR: Should never happen!\r\n", __func__);
+    } else { // ret == false
+        debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
         empty_rx_buffer();
     }
 
 recv_ap_get_out:
-    if(ret) {
+    if(ret) { // ret == true
         /* wait for next line feed */
-        while(!_recv_delim_lf());
+        cnt = 0;
+        while(!_recv_delim_lf()) {
+            if(cnt++ > SPWFXX_MAX_TRIALS) {
+                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+                empty_rx_buffer();
+                ret = false;
+                break;
+            }
+        }
     }
 
     return ret;

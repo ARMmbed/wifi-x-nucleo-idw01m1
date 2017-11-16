@@ -52,7 +52,10 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 bool SPWFSAxx::startup(int mode)
 {
     /*Reset module*/
-    hw_reset();
+    if(!hw_reset()) {
+        debug_if(true, "\r\nSPWF> HW reset failed\r\n");
+        return false;
+    }
 
     /* factory reset */
     if(!(_parser.send(SPWFXX_SEND_FWCFG) && _recv_ok()))
@@ -158,7 +161,10 @@ bool SPWFSAxx::startup(int mode)
     _winds_on();
 
     /* sw reset */
-    reset(true);
+    if(!reset()) {
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        return false;
+    }
 
 #ifndef NDEBUG
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
@@ -218,20 +224,34 @@ bool SPWFSAxx::startup(int mode)
     return true;
 }
 
-void SPWFSAxx::_wait_console_active(void) {
+bool SPWFSAxx::_wait_console_active(void) {
+    int cnt = 0;
+
     while(true) {
         if (_parser.recv("+WIND:0:Console active\n") && _recv_delim_lf()) {
             debug_if(true, "AT^ +WIND:0:Console active\r\n");
-            return;
+            return true;
+        }
+        if(cnt++ > SPWFXX_MAX_TRIALS) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            empty_rx_buffer();
+            return false;
         }
     }
 }
 
-void SPWFSAxx::_wait_wifi_hw_started(void) {
+bool SPWFSAxx::_wait_wifi_hw_started(void) {
+    int cnt = 0;
+
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started\n") && _recv_delim_lf()) {
             debug_if(true, "AT^ +WIND:32:WiFi Hardware Started\r\n");
-            return;
+            return true;
+        }
+        if(cnt++ > SPWFXX_MAX_TRIALS) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            empty_rx_buffer();
+            return false;
         }
     }
 }
@@ -245,12 +265,13 @@ bool SPWFSAxx::hw_reset(void)
 #else // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) && defined(IDW04A1_WIFI_HW_BUG_WA): substitute with SW reset
     _parser.send(SPWFXX_SEND_SW_RESET);
 #endif // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) && defined(IDW04A1_WIFI_HW_BUG_WA)
-    _wait_console_active();
-    return true;
+    return _wait_console_active();
 }
 
-bool SPWFSAxx::reset(bool wifi_on)
+bool SPWFSAxx::reset()
 {
+    bool ret;
+
     /* save current setting in flash */
     if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
     {
@@ -263,13 +284,9 @@ bool SPWFSAxx::reset(bool wifi_on)
                                                                    eventual closing of sockets via "WIND" asynchronous
                                                                    indications! So everything regarding the clean-up
                                                                    of these situations is handled there. */
-    if(wifi_on) {
-        _wait_wifi_hw_started();
-    } else {
-        _wait_console_active();
-    }
+    ret = _wait_wifi_hw_started();
 
-    return true;
+    return ret;
 }
 
 /* Security Mode
@@ -280,6 +297,7 @@ bool SPWFSAxx::reset(bool wifi_on)
 bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 {
     unsigned int n1, n2, n3, n4;
+    int cnt;
 
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
@@ -310,14 +328,24 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     }
 
     /* sw reset */
-    reset(true);
+    if(!reset()) {
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        return false;
+    }
 
-    while(true)
+    cnt = 0;
+    while(true) {
         if(_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4) && _recv_delim_lf())
         {
             debug_if(true, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4);
             break;
         }
+        if(cnt++ > SPWFXX_MAX_TRIALS) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            empty_rx_buffer();
+            return false;
+        }
+    }
 
     return true;
 }
@@ -328,7 +356,7 @@ bool SPWFSAxx::disconnect(void)
     /*disable Wi-Fi device*/
     if(!(_parser.send("AT+S.WIFI=0") && _recv_ok()))
     {
-        debug_if(true, "\r\nSPWF> error disable WiFi\r\n");
+        debug_if(true, "\r\nSPWF> error disabling WiFi\r\n");
         return false;
     }
 #endif // IDW04A1
@@ -340,8 +368,20 @@ bool SPWFSAxx::disconnect(void)
         return false;
     }
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    /*enable Wi-Fi device*/
+    if(!(_parser.send("AT+S.WIFI=1") && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error enabling WiFi\r\n");
+        return false;
+    }
+#endif // IDW04A1
+
     // reset module
-    reset(false);
+    if(!reset()) {
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        return false;
+    }
 
     return true;
 }
