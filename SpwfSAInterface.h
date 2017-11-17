@@ -329,11 +329,14 @@ private:
         SocketAddress addr;
     } spwf_socket_t;
 
-    static bool _socket_is_open(spwf_socket_t *sock) {
-        return (sock->internal_id != SPWFSA_SOCKET_COUNT);
+    bool _socket_is_open(spwf_socket_t *sock) {
+        if(sock->internal_id != SPWFSA_SOCKET_COUNT) {
+            return (_ids[sock->internal_id].internal_id == sock->internal_id);
+        }
+        return false;
     }
 
-    static bool _socket_has_connected(spwf_socket_t *sock) {
+    bool _socket_has_connected(spwf_socket_t *sock) {
         return (_socket_is_open(sock) && (sock->spwf_id != SPWFSA_SOCKET_COUNT));
     }
 
@@ -346,7 +349,10 @@ private:
     }
 
     bool _socket_is_open(int internal_id) {
-        return (internal_id != SPWFSA_SOCKET_COUNT);
+        if(internal_id != SPWFSA_SOCKET_COUNT) {
+            return (_ids[internal_id].internal_id == internal_id);
+        }
+        return false;
     }
 
     bool _socket_has_connected(int internal_id) {
@@ -410,11 +416,11 @@ private:
     void inner_constructor() {
         memset(_ids, 0, sizeof(_ids));
         memset(_cbs, 0, sizeof(_cbs));
-        memset(_internal_ids, SPWFSA_SOCKET_COUNT, sizeof(_internal_ids));
 
-        for (int internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
-            _ids[internal_id].internal_id = SPWFSA_SOCKET_COUNT;
-            _ids[internal_id].spwf_id = SPWFSA_SOCKET_COUNT;
+        for (int sock_cnt = 0; sock_cnt < SPWFSA_SOCKET_COUNT; sock_cnt++) {
+            _ids[sock_cnt].internal_id = SPWFSA_SOCKET_COUNT;
+            _ids[sock_cnt].spwf_id = SPWFSA_SOCKET_COUNT;
+            _internal_ids[sock_cnt] = SPWFSA_SOCKET_COUNT;
         }
 
         _spwf.attach(this, &SpwfSAInterface::event);
