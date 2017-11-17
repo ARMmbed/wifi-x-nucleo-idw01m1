@@ -47,5 +47,5 @@ You can add the HW workaround activation macro to the `macros`-section of your `
 Please make sure that you are using the latest firmware available for the expansion boards. For information on how to perform a FW upgrade you may refer to [X-CUBE-WIFI1](http://www.st.com/content/st_com/en/products/embedded-software/mcus-embedded-software/stm32-embedded-software/stm32cube-embedded-software-expansion/x-cube-wifi1.html), especially to document **"X-NUCLEO-IDW0xx1- FW upgrading over UART_v1.2.pdf"** which is contained within folder **"Documentation"** of the X-CUBE-WIFI1 software archive you need to download. 
 
 The actual firmware `.bin` or `.hex` files can be found under 
-- [STSW-WIFI001](https://my.st.com/content/my_st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi001.html) _for what concerns expansion board_ X-NUCLEO-IDW01M1 _and under_
-- [STSW-WIFI004](https://my.st.com/content/my_st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi004.html) _when considering_ X-NUCLEO-IDW04A1.
+- [STSW-WIFI001](http://www.st.com/content/st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi001.html) _for what concerns expansion board_ X-NUCLEO-IDW01M1 _and under_
+- [STSW-WIFI004](http://www.st.com/content/st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi004.html) _when considering_ X-NUCLEO-IDW04A1.
