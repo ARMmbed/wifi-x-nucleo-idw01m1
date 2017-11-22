@@ -35,7 +35,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _call_event_callback_blocked(false),
   _callback_func(),
   _packets(0), _packets_end(&_packets),
-  _err_msg_buffer(ssid_buf)
+  _msg_buffer(ssid_buf)
 {
     _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
@@ -232,7 +232,7 @@ bool SPWFSAxx::_wait_console_active(void) {
             debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
             return true;
         }
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(++cnt >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -248,7 +248,7 @@ bool SPWFSAxx::_wait_wifi_hw_started(void) {
             debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
             return true;
         }
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(++cnt >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -296,8 +296,7 @@ bool SPWFSAxx::reset(void)
  */
 bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 {
-    unsigned int n1, n2, n3, n4;
-    int cnt;
+    int trials;
 
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
@@ -333,14 +332,32 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
         return false;
     }
 
-    cnt = 0;
+    trials = 0;
     while(true) {
-        if(_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4) && _recv_delim_lf())
+        if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf())
         {
-            debug_if(_dbg_on, "AT^ +WIND:24:WiFi Up:%u.%u.%u.%u\r\n", n1, n2, n3, n4);
-            break;
+            if(strstr(_msg_buffer, ":24:") != NULL) { // WiFi Up
+                debug_if(_dbg_on, "AT^ %s\n", _msg_buffer);
+                if(index(_msg_buffer, '.') != NULL) { // IPv4 address
+                    break;
+                } else {
+                    continue;
+                }
+            }
+            if(strstr(_msg_buffer, ":40:") != NULL) { // Deauthentication
+                debug_if(_dbg_on, "AT~ %s\n", _msg_buffer);
+                if(++trials < 3) { // give it three trials
+                    continue;
+                }
+                empty_rx_buffer();
+                disconnect();
+                return false;
+            } else {
+                debug_if(_dbg_on, "AT] %s\n", _msg_buffer);
+            }
+            continue;
         }
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(++trials >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -780,8 +797,8 @@ void SPWFSAxx::_event_handler(void)
  */
 void SPWFSAxx::_error_handler(void)
 {
-    if(_parser.recv("%[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {
-        debug_if(_dbg_on, "AT^ ERROR:%s (%d)\r\n", _err_msg_buffer, __LINE__);
+    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+        debug_if(_dbg_on, "AT^ ERROR:%s (%d)\r\n", _msg_buffer, __LINE__);
     } else {
         debug_if(_dbg_on, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
     }
@@ -909,12 +926,12 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
 void SPWFSAxx::_hard_fault_handler(void)
 {
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {}
+    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
+    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _err_msg_buffer);
+    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.set_timeout(SPWF_HF_TIMEOUT);
