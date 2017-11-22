@@ -80,8 +80,8 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         case 'E':
-            if(_parser.recv("RROR: %[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: %s (%d)\r\n", _err_msg_buffer, __LINE__);
+            if(_parser.recv("RROR: %[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+                debug_if(true, "AT^ ERROR: %s (%d)\r\n", _msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();

@@ -376,6 +376,12 @@ private:
         return (!sock.no_more_data);
     }
 
+    void reset_credentials() {
+        memset(ap_ssid, 0, sizeof(ap_ssid));
+        memset(ap_pass, 0, sizeof(ap_pass));
+        ap_sec = NSAPI_SECURITY_NONE;
+    }
+
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
     SPWFSA01 _spwf;
 #elif MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
@@ -427,6 +433,8 @@ private:
 
         _connected_to_network = false;
         _isInitialized = false;
+
+        reset_credentials();
     }
 
 private:

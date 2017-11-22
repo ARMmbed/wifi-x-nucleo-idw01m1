@@ -75,6 +75,11 @@ nsapi_error_t SpwfSAInterface::connect(void)
     int mode;
     char *pass_phrase = ap_pass;
 
+    // check for valid SSID
+    if(ap_ssid[0] == '\0') {
+        return NSAPI_ERROR_PARAMETER;
+    }
+
     switch(ap_sec)
     {
         case NSAPI_SECURITY_NONE:
@@ -111,7 +116,7 @@ nsapi_error_t SpwfSAInterface::connect(void)
     _spwf.setTimeout(SPWF_CONNECT_TIMEOUT);
 
     if (!_spwf.connect(ap_ssid, pass_phrase, mode)) {
-        return NSAPI_ERROR_NO_CONNECTION;
+        return NSAPI_ERROR_AUTH_FAILURE;
     }
 
     if (!_spwf.getIPAddress()) {
@@ -133,11 +138,15 @@ nsapi_error_t SpwfSAInterface::connect(void)
 nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi_security_t security,
                                        uint8_t channel)
 {
+    nsapi_error_t ret;
+
     if (channel != 0) {
         return NSAPI_ERROR_UNSUPPORTED;
     }
 
-    set_credentials(ssid, pass, security);
+    ret = set_credentials(ssid, pass, security);
+    if(ret != NSAPI_ERROR_OK) return ret;
+
     return connect();
 }
 
@@ -447,13 +456,27 @@ void SpwfSAInterface::event(void) {
 
 nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security)
 {
-    memset(ap_ssid, 0, sizeof(ap_ssid));
-    strncpy(ap_ssid, ssid, sizeof(ap_ssid));
+    if(ssid == NULL) {
+        return NSAPI_ERROR_PARAMETER;
+    }
 
-    memset(ap_pass, 0, sizeof(ap_pass));
-    strncpy(ap_pass, pass, sizeof(ap_pass));
+    if(pass != NULL) {
+        if(strlen(pass) < sizeof(ap_pass)) {
+            if(security == NSAPI_SECURITY_NONE) {
+                return NSAPI_ERROR_PARAMETER;
+            }
+        } else {
+            return NSAPI_ERROR_PARAMETER;
+        }
+    } else if(security != NSAPI_SECURITY_NONE) {
+        return NSAPI_ERROR_PARAMETER;
+    }
+
+    reset_credentials();
 
     ap_sec = security;
+    strncpy(ap_ssid, ssid, sizeof(ap_ssid) - 1);
+    strncpy(ap_pass, pass, sizeof(ap_pass) - 1);
 
     return NSAPI_ERROR_OK;
 }

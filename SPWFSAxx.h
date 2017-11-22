@@ -332,7 +332,7 @@ private:
     char _mac_buffer[18];
 
     char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
-    char *_err_msg_buffer;
+    char *_msg_buffer;
 
 private:
     friend class SPWFSA01;
