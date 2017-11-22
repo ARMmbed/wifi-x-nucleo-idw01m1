@@ -31,7 +31,7 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
     int value;
-    int cnt;
+    int trials;
     BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,NULL,%s", addr, port, type))
@@ -51,9 +51,9 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
     }
 
     /* wait for next character */
-    cnt = 0;
+    trials = 0;
     while((value = _parser.getc()) < 0) {
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(++trials >= SPWFXX_MAX_TRIALS) {
             debug("\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
             empty_rx_buffer();
             return false;
@@ -84,8 +84,8 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             return true;
         case 'E':
             int err_nr;
-            if(_parser.recv("RROR:%d:%[^\n]\n", &err_nr, _err_msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, _err_msg_buffer, __LINE__);
+            if(_parser.recv("RROR:%d:%[^\n]\n", &err_nr, _msg_buffer) && _recv_delim_lf()) {
+                debug_if(true, "AT^ AT-S.ERROR:%d:%s (%d)\r\n", err_nr, _msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
@@ -151,7 +151,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     bool ret;
     int curr;
     unsigned int channel;
-    int cnt;
+    int trials;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
@@ -165,9 +165,9 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
     /* run to 'horizontal tab' */
-    cnt = 0;
+    trials = 0;
     while(_parser.getc() != '\x09') {
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(++trials >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -233,9 +233,9 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
 recv_ap_get_out:
     if(ret) { // ret == true
         /* wait for next line feed */
-        cnt = 0;
+        trials = 0;
         while(!_recv_delim_lf()) {
-            if(cnt++ > SPWFXX_MAX_TRIALS) {
+            if(++trials >= SPWFXX_MAX_TRIALS) {
                 debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
                 empty_rx_buffer();
                 ret = false;

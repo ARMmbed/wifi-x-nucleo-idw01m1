@@ -31,7 +31,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 {
     int socket_id;
     int value;
-    int cnt;
+    int trials;
     BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
@@ -45,9 +45,9 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
      */
 
     /* wait for first character */
-    cnt = 0;
+    trials = 0;
     while((value = _parser.getc()) < 0) {
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(trials++ > SPWFXX_MAX_TRIALS) {
             debug("\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
             empty_rx_buffer();
             return false;
@@ -80,8 +80,8 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         case 'E':
-            if(_parser.recv("RROR: %[^\n]\n", _err_msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: %s (%d)\r\n", _err_msg_buffer, __LINE__);
+            if(_parser.recv("RROR: %[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+                debug_if(true, "AT^ ERROR: %s (%d)\r\n", _msg_buffer, __LINE__);
             } else {
                 debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
@@ -138,7 +138,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 {
     bool ret;
     unsigned int channel;
-    int cnt;
+    int trials;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
@@ -148,9 +148,9 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
     /* run to 'horizontal tab' */
-    cnt = 0;
+    trials = 0;
     while(_parser.getc() != '\x09') {
-        if(cnt++ > SPWFXX_MAX_TRIALS) {
+        if(trials++ > SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             return false;
         }
@@ -215,9 +215,9 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 recv_ap_get_out:
     if(ret) { // ret == true
         /* wait for next line feed */
-        cnt = 0;
+        trials = 0;
         while(!_recv_delim_lf()) {
-            if(cnt++ > SPWFXX_MAX_TRIALS) {
+            if(trials++ > SPWFXX_MAX_TRIALS) {
                 debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
                 ret = false;
                 break;
