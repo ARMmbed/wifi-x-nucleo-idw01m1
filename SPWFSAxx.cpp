@@ -225,14 +225,14 @@ bool SPWFSAxx::startup(int mode)
 }
 
 bool SPWFSAxx::_wait_console_active(void) {
-    int cnt = 0;
+    int trials = 0;
 
     while(true) {
         if (_parser.recv("+WIND:0:Console active\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
             return true;
         }
-        if(++cnt >= SPWFXX_MAX_TRIALS) {
+        if(++trials >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -241,14 +241,14 @@ bool SPWFSAxx::_wait_console_active(void) {
 }
 
 bool SPWFSAxx::_wait_wifi_hw_started(void) {
-    int cnt = 0;
+    int trials = 0;
 
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started\n") && _recv_delim_lf()) {
             debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
             return true;
         }
-        if(++cnt >= SPWFXX_MAX_TRIALS) {
+        if(++trials >= SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
