@@ -338,7 +338,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
         {
             if(strstr(_msg_buffer, ":24:") != NULL) { // WiFi Up
                 debug_if(_dbg_on, "AT^ %s\n", _msg_buffer);
-                if(index(_msg_buffer, '.') != NULL) { // IPv4 address
+                if(strchr(_msg_buffer, '.') != NULL) { // IPv4 address
                     break;
                 } else {
                     continue;
