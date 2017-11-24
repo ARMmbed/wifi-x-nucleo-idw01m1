@@ -221,7 +221,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
     int internal_id;
 
     for (internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
-        if (_ids[internal_id].internal_id == SPWFSA_SOCKET_COUNT) break;
+        if(_ids[internal_id].internal_id == SPWFSA_SOCKET_COUNT) break;
     }
 
     if(internal_id == SPWFSA_SOCKET_COUNT) {
@@ -251,7 +251,7 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
-    MBED_ASSERT(socket->internal_id != SPWFSA_SOCKET_COUNT);
+    MBED_ASSERT(((unsigned int)socket->internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
     if(_socket_has_connected(socket->internal_id)) return NSAPI_ERROR_IS_CONNECTED;
 

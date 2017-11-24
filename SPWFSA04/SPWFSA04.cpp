@@ -65,7 +65,8 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             /* get next character */
             value = _parser.getc();
             if(value != 'n') {
-                debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
+                debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d) (%d, \'%c\')\r\n",
+                         __LINE__, value, value);
                 empty_rx_buffer();
                 return false;
             }
@@ -92,7 +93,8 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         default:
-            debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d)\r\n", __LINE__);
+            debug_if(true, "\r\nSPWF> `SPWFSA04::open`: error opening socket (%d) (%d, \'%c\')\r\n",
+                     __LINE__, value, value);
             empty_rx_buffer();
             break;
     }
