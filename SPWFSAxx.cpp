@@ -95,7 +95,7 @@ bool SPWFSAxx::startup(int mode)
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -322,7 +322,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     /*set STA mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set 1 (STA)\r\n");
+        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set 1 (STA)\r\n");
         return false;
     }
 
@@ -381,7 +381,7 @@ bool SPWFSAxx::disconnect(void)
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error wifi mode set idle (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -523,7 +523,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
             && _parser.recv(SPWFXX_RECV_DATALEN, &amount)
             && _recv_ok())) {
         debug_if(_dbg_on, "\r\nSPWF> %s failed\r\n", __func__);
-        return 0;
+        return SPWFXX_ERR_LEN;
     }
 
     return (int)amount;
@@ -579,8 +579,8 @@ void SPWFSAxx::_read_in_pending(void) {
                 int amount;
 
                 amount = _read_in_packet(spwf_id);
-                if(amount < 0) {
-                    return; /* out of memory */
+                if(amount == SPWFXX_ERR_OOM) { /* consider only 'SPWFXX_ERR_OOM' as non recoverable */
+                    return;
                 }
             }
 
@@ -596,9 +596,9 @@ void SPWFSAxx::_read_in_pending(void) {
 }
 
 /* Note: returns
- * '1'  in case of success
- * '0'  in case of `_read_in()` error
- * '-1' in case of "out of memory"
+ * 'SPWFXX_ERR_OK'   in case of success
+ * 'SPWFXX_ERR_OOM'  in case of "out of memory"
+ * 'SPWFXX_ERR_READ' in case of `_read_in()` error
  */
 int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
@@ -609,7 +609,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
         debug("%s(%d): Out of memory!", __func__, __LINE__);
 #endif
         debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
-        return -1; /* out of memory: give up here! */
+        return SPWFXX_ERR_OOM; /* out of memory: give up here! */
     }
 
     /* init packet */
@@ -621,7 +621,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
     if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
         free(packet);
         debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
-        return 0;
+        return SPWFXX_ERR_READ;
     } else {
         /* append to packet list */
         *_packets_end = packet;
@@ -631,13 +631,14 @@ int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
         _call_callback();
     }
 
-    return 1;
+    return SPWFXX_ERR_OK;
 }
 
 /* Note: returns
- * '>0'  in case of success, amount of read in data (in bytes)
- * '0'   in case of `_read_in()` error no more data to be read
- * '-1'  in case of "out of memory"
+ * '>=0'             in case of success, amount of read in data (in bytes)
+ * 'SPWFXX_ERR_OOM'  in case of "out of memory"
+ * 'SPWFXX_ERR_READ' in case of other `_read_in_packet()` error
+ * 'SPWFXX_ERR_LEN'  in case of `_read_len()` error
  */
 int SPWFSAxx::_read_in_packet(int spwf_id) {
     int amount;
@@ -648,10 +649,18 @@ int SPWFSAxx::_read_in_packet(int spwf_id) {
     amount = _read_len(spwf_id);
     if(amount > 0) {
         int ret = _read_in_packet(spwf_id, (uint32_t)amount);
-        if(ret <= 0) { /* "out of memory" or `_read_in()` error */
+        MBED_ASSERT(ret != 0);
+        if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
+            /* we do not know if data is still pending at this point
+               but setting the pending data bit again might lead to an endless loop */
             return ret;
         }
+    } else if(amount < 0) { /* 'SPWFXX_ERR_LEN' error */
+        MBED_ASSERT(amount == SPWFXX_ERR_LEN);
+        /* we do not know if data is still pending at this point
+           but setting the pending data bit again might lead to an endless loop */
     }
+
     return amount;
 }
 
@@ -715,7 +724,7 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount)
             int len;
 
             len = _read_in_packet(spwf_id);
-            if(len <= 0)  { /* "out of memory", `_read_in()` error, or no more data to be read */
+            if(len <= 0)  { /* SPWFXX error or no more data to be read */
                 return -1;
             }
         }
@@ -726,39 +735,38 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount)
 bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
-    int retry_cnt = 0;
 
-    if(spwf_id == SPWFSA_SOCKET_COUNT) {
-        goto close_bh_handling;
+    if(((unsigned int)spwf_id) >= ((unsigned int)SPWFSA_SOCKET_COUNT)) {
+        goto close_bh_handling; // `ret == false`
     }
 
-close_flush:
-    // Flush out pending data
-    while(true) {
-        int amount = _read_in_packet(spwf_id);
-        if(amount < 0) goto close_bh_handling; // out of memory
-        if(amount == 0) break; // no more data to be read or `_read_in()` error
+    for(int retry_cnt = 0; retry_cnt < CLOSE_MAX_RETRY; retry_cnt++) {
+        // Flush out pending data
+        while(true) {
+            int amount = _read_in_packet(spwf_id);
+            if(amount < 0) { // SPWFXX error
+                /* empty RX buffer & try to close */
+                empty_rx_buffer();
+                break;
+            }
+            if(amount == 0) break; // no more data to be read
 
-        /* immediately free packet (to avoid "out of memory") */
-        _free_packets(spwf_id);
+            /* immediately free packet (to avoid "out of memory") */
+            _free_packets(spwf_id);
 
-        /* interleave bottom halves */
-        _execute_bottom_halves();
-    }
+            /* interleave bottom halves */
+            _execute_bottom_halves();
+        }
 
-    // Close socket
-    if (_parser.send("AT+S.SOCKC=%d", spwf_id)
-            && _recv_ok()) {
-        ret = true;
-        goto close_bh_handling;
-    } else {
-        if(retry_cnt++ < CLOSE_MAX_RETRY) {
+        // Close socket
+        if (_parser.send("AT+S.SOCKC=%d", spwf_id)
+                && _recv_ok()) {
+            ret = true;
+            break; // finish closing
+        } else { // close failed
             debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
             /* interleave bottom halves */
             _execute_bottom_halves();
-
-            /* retry flushing (assuming data is still pending) */
-            goto close_flush;
         }
     }
 
@@ -850,6 +858,9 @@ void SPWFSAxx::_packet_handler_th(void)
     }
 
     debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
+
+    /* check for the module to report a valid id */
+    MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
     /* set that there is pending data for socket */
     /* NOTE: it seems as if asynchronous indications might report not up-to-date data length values
@@ -955,9 +966,9 @@ void SPWFSAxx::_wifi_hwfault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
+    error("\r\nSPWFSAXX WiFi HW fault error: %u\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX wifi HW fault error: %u\r\n", failure_nr);
+    debug("\r\nSPWFSAXX WiFi HW fault error: %u\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.set_timeout(SPWF_HF_TIMEOUT);

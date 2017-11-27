@@ -330,14 +330,14 @@ private:
     } spwf_socket_t;
 
     bool _socket_is_open(spwf_socket_t *sock) {
-        if(sock->internal_id != SPWFSA_SOCKET_COUNT) {
+        if(((unsigned int)sock->internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)) {
             return (_ids[sock->internal_id].internal_id == sock->internal_id);
         }
         return false;
     }
 
     bool _socket_has_connected(spwf_socket_t *sock) {
-        return (_socket_is_open(sock) && (sock->spwf_id != SPWFSA_SOCKET_COUNT));
+        return (_socket_is_open(sock) && (((unsigned int)sock->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)));
     }
 
     bool _socket_is_still_connected(spwf_socket_t *sock) {
@@ -349,7 +349,7 @@ private:
     }
 
     bool _socket_is_open(int internal_id) {
-        if(internal_id != SPWFSA_SOCKET_COUNT) {
+        if(((unsigned int)internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)) {
             return (_ids[internal_id].internal_id == internal_id);
         }
         return false;
@@ -407,13 +407,15 @@ private:
     void event(void);
     nsapi_error_t init(void);
 
-    int get_internal_id(int spwf_id) { // checks also if `spwf_id` is still "valid"
-        MBED_ASSERT(spwf_id != SPWFSA_SOCKET_COUNT);
-
-        int internal_id = _internal_ids[spwf_id];
-        if((_socket_is_open(internal_id)) && (_ids[internal_id].spwf_id == spwf_id)) {
-            return internal_id;
-        } else {
+    int get_internal_id(int spwf_id) { // checks also if `spwf_id` is (still) "valid"
+        if(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)) { // valid `spwf_id`
+            int internal_id = _internal_ids[spwf_id];
+            if((_socket_is_open(internal_id)) && (_ids[internal_id].spwf_id == spwf_id)) {
+                return internal_id;
+            } else {
+                return SPWFSA_SOCKET_COUNT;
+            }
+        } else { // invalid `spwf_id`
             return SPWFSA_SOCKET_COUNT;
         }
     }

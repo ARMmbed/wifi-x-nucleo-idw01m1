@@ -33,6 +33,12 @@
 #define SPWFSAXX_CTS_PIN    NC
 #endif // !defined(SPWFSAXX_CTS_PIN)
 
+#define SPWFXX_ERR_OK               (+1)
+#define SPWFXX_ERR_OOM              (-1)
+#define SPWFXX_ERR_READ             (-2)
+#define SPWFXX_ERR_LEN              (-3)
+
+
 class SpwfSAInterface;
 
 /** SPWFSAxx Interface class.
