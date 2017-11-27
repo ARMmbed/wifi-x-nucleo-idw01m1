@@ -316,7 +316,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
  * @param  handle: Pointer to handle
  *         data: pointer to data
  *         size: size of data
- * @retval no of bytes sent
+ * @retval number of bytes sent
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
@@ -342,7 +342,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *dat
  * @param  handle: Pointer to handle
  *         data: pointer to data
  *         size: size of data
- * @retval no of bytes read or negative error code in case of error
+ * @retval number of bytes read or negative error code in case of error
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
@@ -378,7 +378,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, uns
  *         addr: address of udp socket
  *         data: pointer to data
  *         size: size of data
- * @retval no of bytes sent
+ * @retval number of bytes sent
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
@@ -412,7 +412,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
  *         addr: address of udp socket
  *         data: pointer to data
  *         size: size of data
- * @retval no of bytes read
+ * @retval number of bytes read
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
