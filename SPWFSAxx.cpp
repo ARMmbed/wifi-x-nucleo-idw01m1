@@ -782,6 +782,17 @@ close_bh_handling:
         _free_packets(spwf_id);
     } else {
         debug_if(_dbg_on, "\r\nSPWF> SPWFSAxx::close failed (%d)\r\n", __LINE__);
+
+        int internal_id = _associated_interface.get_internal_id(spwf_id);
+        if(!_associated_interface._socket_is_still_connected(internal_id)) {
+            /* clear pending data flag (should be redundant) */
+            _clear_pending_data(spwf_id);
+
+            /* free packets for this socket */
+            _free_packets(spwf_id);
+
+            ret = true;
+        }
     }
 
     return ret;
@@ -1004,7 +1015,7 @@ void SPWFSAxx::_server_gone_handler(void)
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
     /* only set `server_gone`
-     * user still can receive date & must still explicitly close the socket
+     * user still can receive data & must still explicitly close the socket
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
     if(internal_id != SPWFSA_SOCKET_COUNT) {
