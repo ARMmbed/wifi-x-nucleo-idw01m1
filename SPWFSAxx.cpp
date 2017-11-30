@@ -37,6 +37,8 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
 {
+    bzero(_pending_pkt_sizes, sizeof(_pending_pkt_sizes));
+
     _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debug_on(debug);
@@ -280,10 +282,10 @@ bool SPWFSAxx::reset(void)
     }
 
     if(!_parser.send(SPWFXX_SEND_SW_RESET)) return false; /* betzw - NOTE: "keep the current state and reset the device".
-                                                                   We assume that the module informs us about the
-                                                                   eventual closing of sockets via "WIND" asynchronous
-                                                                   indications! So everything regarding the clean-up
-                                                                   of these situations is handled there. */
+                                                                     We assume that the module informs us about the
+                                                                     eventual closing of sockets via "WIND" asynchronous
+                                                                     indications! So everything regarding the clean-up
+                                                                     of these situations is handled there. */
     ret = _wait_wifi_hw_started();
 
     return ret;
@@ -495,9 +497,9 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE) ? MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE : amount;
+    for(to_send = (amount > SPWFSA_SEND_PKTSIZE) ? SPWFSA_SEND_PKTSIZE : amount;
             sent < amount;
-            to_send = ((amount - sent) > MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE) ? MBED_CONF_DRIVERS_UART_SERIAL_TXBUF_SIZE : (amount - sent)) {
+            to_send = ((amount - sent) > SPWFSA_SEND_PKTSIZE) ? SPWFSA_SEND_PKTSIZE : (amount - sent)) {
         {
             BH_HANDLER;
 
@@ -525,6 +527,13 @@ int SPWFSAxx::_read_len(int spwf_id) {
         debug_if(true, "\r\nSPWF> %s failed\r\n", __func__);
         return SPWFXX_ERR_LEN;
     }
+
+    if(amount > 0) {
+        debug_if(true, "%s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
+    }
+
+    /* add new cumulative size */
+    _add_pending_pkt_size(spwf_id, amount);
 
     return (int)amount;
 }
@@ -572,9 +581,9 @@ void SPWFSAxx::_read_in_pending(void) {
     static int internal_id_cnt = 0;
 
     while(_is_data_pending()) {
-        int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
-
         if(_associated_interface._socket_has_connected(internal_id_cnt)) {
+            int spwf_id = _associated_interface._ids[internal_id_cnt].spwf_id;
+
             if(_is_data_pending(spwf_id)) {
                 int amount;
 
@@ -600,7 +609,7 @@ void SPWFSAxx::_read_in_pending(void) {
  * 'SPWFXX_ERR_OOM'  in case of "out of memory"
  * 'SPWFXX_ERR_READ' in case of `_read_in()` error
  */
-int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
+int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
@@ -614,15 +623,20 @@ int SPWFSAxx::_read_in_packet(int spwf_id, int amount) {
 
     /* init packet */
     packet->id = spwf_id;
-    packet->len = (uint32_t)amount;
+    packet->len = amount;
     packet->next = 0;
 
     /* read data in */
-    if(!(_read_in((char*)(packet + 1), spwf_id, (uint32_t)amount) > 0)) {
+    if(!(_read_in((char*)(packet + 1), spwf_id, amount) > 0)) {
         free(packet);
         debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_READ;
     } else {
+        debug_if(true, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+
+        /* adjust pkt cumulative size */
+        _update_pending_pkt_size(spwf_id, amount);
+
         /* append to packet list */
         *_packets_end = packet;
         _packets_end = &packet->next;
@@ -647,6 +661,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id) {
 
     _clear_pending_data(spwf_id);
     amount = _read_len(spwf_id);
+
     if(amount > 0) {
         int ret = _read_in_packet(spwf_id, (uint32_t)amount);
         MBED_ASSERT(ret != 0);
@@ -689,7 +704,7 @@ void SPWFSAxx::_free_all_packets() {
 /**
  *	Recv Function
  */
-int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount)
+int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 {
     BH_HANDLER;
 
@@ -699,22 +714,67 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount)
             if ((*p)->id == spwf_id) {
                 debug_if(_dbg_on, "\r\nRead done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
-                if (q->len <= amount) { // Return and remove full packet
-                    memcpy(data, q+1, q->len);
 
-                    if (_packets_end == &(*p)->next) {
-                        _packets_end = p;
+                MBED_ASSERT(q->len > 0);
+
+                if(datagram) { // UDP => always remove pkt size
+                    // will always consume a whole pending size
+                    uint32_t removed_size = _remove_pending_pkt_size(spwf_id);
+                    uint32_t ret;
+
+                    MBED_ASSERT(removed_size <= q->len);
+
+                    debug_if(true, "%s():\t\t\t%d:%d (datagram)\r\n", __func__, spwf_id, removed_size);
+
+                    if(amount < removed_size) { // => `amount < (q->len == removed_size)`, copy only `amount` bytes
+                        memcpy(data, q+1, amount);
+                        ret = amount;
+                    } else { // => `amount >= (removed_size == q->len)`, copy `removed_size` bytes
+                        memcpy(data, q+1, removed_size);
+                        ret = removed_size;
                     }
-                    *p = (*p)->next;
-                    uint32_t len = q->len;
-                    free(q);
-                    return len;
-                }
-                else { // return only partial packet
-                    memcpy(data, q+1, amount);
-                    q->len -= amount;
-                    memmove(q+1, (uint8_t*)(q+1) + amount, q->len);
-                    return amount;
+
+                    if(q->len == removed_size) { // remove full packet
+                        if (_packets_end == &(*p)->next) {
+                            _packets_end = p;
+                        }
+                        *p = (*p)->next;
+                        free(q);
+
+                        return ret;
+                    } else { // `removed_size < q->len`, remove only partial packet
+                        q->len -= removed_size;
+                        memmove(q+1, (uint8_t*)(q+1) + removed_size, q->len);
+
+                        return ret;
+                    }
+                } else { // TCP
+                    if (q->len <= amount) { // return and remove full packet
+                        memcpy(data, q+1, q->len);
+
+                        if (_packets_end == &(*p)->next) {
+                            _packets_end = p;
+                        }
+                        *p = (*p)->next;
+                        uint32_t len = q->len;
+                        free(q);
+
+                        /* adjust pending sizes */
+                        _adjust_pending_pkt_sizes(spwf_id, len);
+
+                        return len;
+                    } else { // `q->len > amount`, return only partial packet
+                        if(amount > 0) {
+                            memcpy(data, q+1, amount);
+                            q->len -= amount;
+                            memmove(q+1, (uint8_t*)(q+1) + amount, q->len);
+
+                            /* adjust pending sizes */
+                            _adjust_pending_pkt_sizes(spwf_id, amount);
+                        }
+
+                        return amount;
+                    }
                 }
             }
         }
@@ -780,6 +840,9 @@ close_bh_handling:
 
         /* free packets for this socket */
         _free_packets(spwf_id);
+
+        /* reset pending data sizes */
+        _reset_pending_pkt_sizes(spwf_id);
     } else {
         debug_if(true, "\r\nSPWF> SPWFSAxx::close failed (%d)\r\n", __LINE__);
 
@@ -790,6 +853,9 @@ close_bh_handling:
 
             /* free packets for this socket */
             _free_packets(spwf_id);
+
+            /* reset pending data sizes */
+            _reset_pending_pkt_sizes(spwf_id);
 
             ret = true;
         }
@@ -868,7 +934,7 @@ void SPWFSAxx::_packet_handler_th(void)
         return;
     }
 
-    debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
+    debug_if(true, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
 
     /* check for the module to report a valid id */
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
@@ -879,6 +945,7 @@ void SPWFSAxx::_packet_handler_th(void)
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
     if(internal_id != SPWFSA_SOCKET_COUNT) {
+        _add_pending_pkt_size(spwf_id, amount);
         _set_pending_data(spwf_id);
     } else {
         debug_if(true, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);

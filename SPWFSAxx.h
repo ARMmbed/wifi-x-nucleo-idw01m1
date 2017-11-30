@@ -39,6 +39,80 @@
 #define SPWFXX_ERR_LEN              (-3)
 
 
+/* Max number of sockets & packets */
+#define SPWFSA_SOCKET_COUNT         (8)
+#define SPWFSA_MAX_PACKETS          (4)
+#define SPWFSA_SEND_PKTSIZE         (730)
+
+#define PENDING_DATA_SLOTS          (SPWFSA_MAX_PACKETS+1)
+
+/* Pending data packets size buffer */
+class SpwfRealPendingPackets {
+public:
+    bool empty(void) {
+        return (first_pkt_ptr == last_pkt_ptr);
+    }
+
+    void add(uint32_t new_cum_size) {
+#ifndef NDEBUG
+        if(new_cum_size < cumulative_size) {
+            debug_if(true, "%s():\t\t\t%u:%u\r\n", __func__, new_cum_size, cumulative_size);
+        }
+#endif
+
+        if(new_cum_size <= cumulative_size) {
+            /* nothing to do */
+            return;
+        }
+
+        real_pkt_sizes[last_pkt_ptr] = (uint16_t)(new_cum_size - cumulative_size);
+        cumulative_size = new_cum_size;
+
+        last_pkt_ptr = (last_pkt_ptr + 1) % PENDING_DATA_SLOTS;
+
+        MBED_ASSERT(first_pkt_ptr != last_pkt_ptr);
+    }
+
+    void update(uint32_t consumed_size) {
+        MBED_ASSERT((consumed_size > 0) && (consumed_size <= cumulative_size));
+
+        cumulative_size -= consumed_size;
+    }
+
+    uint32_t remove(void) {
+        if(empty()) return 0;
+
+        uint32_t ret = real_pkt_sizes[first_pkt_ptr];
+        first_pkt_ptr = (first_pkt_ptr + 1) % PENDING_DATA_SLOTS;
+
+        return ret;
+    }
+
+    uint32_t get(void) {
+        if(empty()) return 0;
+
+        return real_pkt_sizes[first_pkt_ptr];
+    }
+
+    void set(uint32_t new_elem_size) {
+        MBED_ASSERT(!empty());
+
+        real_pkt_sizes[last_pkt_ptr] = (uint16_t)new_elem_size;
+    }
+
+    void reset(void) {
+        first_pkt_ptr = 0;
+        last_pkt_ptr = 0;
+        cumulative_size = 0;
+    }
+
+private:
+    uint16_t real_pkt_sizes[PENDING_DATA_SLOTS];
+    uint8_t  first_pkt_ptr;
+    uint8_t  last_pkt_ptr;
+    uint32_t cumulative_size;
+};
+
 class SpwfSAInterface;
 
 /** SPWFSAxx Interface class.
@@ -128,9 +202,10 @@ public:
      * @param id id to receive from
      * @param data placeholder for returned information
      * @param amount number of bytes to be received
+     * @param datagram receive a datagram packet
      * @return the number of bytes received
      */
-    int32_t recv(int id, void *data, uint32_t amount);
+    int32_t recv(int id, void *data, uint32_t amount, bool datagram);
 
     /**
      * Closes a socket
@@ -171,13 +246,18 @@ public:
 private:
     UARTSerial _serial;
     ATCmdParser _parser;
+
     DigitalOut _wakeup;
     DigitalOut _reset;
     PinName _rts;
     PinName _cts;
+
     int _timeout;
     bool _dbg_on;
+
     int _pending_sockets_bitmap;
+    SpwfRealPendingPackets _pending_pkt_sizes[SPWFSA_SOCKET_COUNT];
+
     bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
 
@@ -245,7 +325,7 @@ private:
     void _winds_on(void);
     void _read_in_pending(void);
     int _read_in_packet(int spwf_id);
-    int _read_in_packet(int spwf_id, int amount);
+    int _read_in_packet(int spwf_id, uint32_t amount);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
@@ -268,21 +348,61 @@ private:
         return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
-    bool _is_data_pending(void) {
-        if(_pending_sockets_bitmap != 0) return true;
-        else return false;
+    void _add_pending_pkt_size(int spwf_id, uint32_t size) {
+        _pending_pkt_sizes[spwf_id].add(size);
     }
 
-    void _set_pending_data(int spwf_id) {
-        _pending_sockets_bitmap |= (1 << spwf_id);
+    void _update_pending_pkt_size(int spwf_id, uint32_t size) {
+        _pending_pkt_sizes[spwf_id].update(size);
     }
 
-    void _clear_pending_data(int spwf_id) {
+    uint32_t _remove_pending_pkt_size(int spwf_id) {
+        return _pending_pkt_sizes[spwf_id].remove();
+    }
+
+    void _set_pending_pkt_size(int spwf_id, uint32_t size) {
+        if(size > 0) {
+            _pending_pkt_sizes[spwf_id].set(size);
+        }
+    }
+
+    void _adjust_pending_pkt_sizes(int spwf_id, uint32_t consumed_size) {
+        uint32_t removed_size = 0;
+        uint32_t packet_size = _get_pending_pkt_size(spwf_id);
+
+        MBED_ASSERT(consumed_size > 0);
+
+        for(; (packet_size > 0) && ((packet_size + removed_size) <= consumed_size); packet_size = _get_pending_pkt_size(spwf_id)) {
+            removed_size += _remove_pending_pkt_size(spwf_id);
+        };
+
+        MBED_ASSERT((removed_size + packet_size) >= consumed_size);
+        _set_pending_pkt_size(spwf_id, (removed_size + packet_size) - consumed_size);
+    }
+
+    uint32_t _get_pending_pkt_size(int spwf_id) {
+        return _pending_pkt_sizes[spwf_id].get();
+    }
+
+   void _reset_pending_pkt_sizes(int spwf_id) {
+        _pending_pkt_sizes[spwf_id].reset();
+    }
+
+   void _set_pending_data(int spwf_id) {
+       _pending_sockets_bitmap |= (1 << spwf_id);
+   }
+
+   void _clear_pending_data(int spwf_id) {
         _pending_sockets_bitmap &= ~(1 << spwf_id);
     }
 
     bool _is_data_pending(int spwf_id) {
         return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
+    }
+
+    bool _is_data_pending(void) {
+        if(_pending_sockets_bitmap != 0) return true;
+        else return false;
     }
 
     void _packet_handler_bh(void) {
