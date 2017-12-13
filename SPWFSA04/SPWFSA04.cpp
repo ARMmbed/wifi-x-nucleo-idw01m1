@@ -142,6 +142,8 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
         debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
     }
 
+    debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+
     /* unblock asynchronous indications */
     _winds_on();
 

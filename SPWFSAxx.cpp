@@ -532,8 +532,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
         debug_if(true, "%s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
     }
 
-    /* add new cumulative size */
-    _add_pending_pkt_size(spwf_id, amount);
+    MBED_ASSERT(((int)amount) >= 0);
 
     return (int)amount;
 }
@@ -587,7 +586,7 @@ void SPWFSAxx::_read_in_pending(void) {
             if(_is_data_pending(spwf_id)) {
                 int amount;
 
-                amount = _read_in_packet(spwf_id);
+                amount = _read_in_pkt(spwf_id, false);
                 if(amount == SPWFXX_ERR_OOM) { /* consider only 'SPWFXX_ERR_OOM' as non recoverable */
                     return;
                 }
@@ -634,49 +633,18 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     } else {
         debug_if(true, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
 
-        /* adjust pkt cumulative size */
-        _update_pending_pkt_size(spwf_id, amount);
-
         /* append to packet list */
         *_packets_end = packet;
         _packets_end = &packet->next;
+
+        /* remove from pending sizes */
+        _remove_pending_pkt_size(spwf_id, amount);
 
         /* force call of (external) callback */
         _call_callback();
     }
 
     return SPWFXX_ERR_OK;
-}
-
-/* Note: returns
- * '>=0'             in case of success, amount of read in data (in bytes)
- * 'SPWFXX_ERR_OOM'  in case of "out of memory"
- * 'SPWFXX_ERR_READ' in case of other `_read_in_packet()` error
- * 'SPWFXX_ERR_LEN'  in case of `_read_len()` error
- */
-int SPWFSAxx::_read_in_packet(int spwf_id) {
-    int amount;
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
-
-    _clear_pending_data(spwf_id);
-    amount = _read_len(spwf_id);
-
-    if(amount > 0) {
-        int ret = _read_in_packet(spwf_id, (uint32_t)amount);
-        MBED_ASSERT(ret != 0);
-        if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
-            /* we do not know if data is still pending at this point
-               but setting the pending data bit again might lead to an endless loop */
-            return ret;
-        }
-    } else if(amount < 0) { /* 'SPWFXX_ERR_LEN' error */
-        MBED_ASSERT(amount == SPWFXX_ERR_LEN);
-        /* we do not know if data is still pending at this point
-           but setting the pending data bit again might lead to an endless loop */
-    }
-
-    return amount;
 }
 
 void SPWFSAxx::_free_packets(int spwf_id) {
@@ -701,96 +669,6 @@ void SPWFSAxx::_free_all_packets() {
     }
 }
 
-/**
- *	Recv Function
- */
-int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
-{
-    BH_HANDLER;
-
-    while (true) {
-        /* check if any packets are ready for us */
-        for (struct packet **p = &_packets; *p; p = &(*p)->next) {
-            if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\nRead done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
-                struct packet *q = *p;
-
-                MBED_ASSERT(q->len > 0);
-
-                if(datagram) { // UDP => always remove pkt size
-                    // will always consume a whole pending size
-                    uint32_t removed_size = _remove_pending_pkt_size(spwf_id);
-                    uint32_t ret;
-
-                    MBED_ASSERT(removed_size <= q->len);
-
-                    debug_if(true, "%s():\t\t\t%d:%d (datagram)\r\n", __func__, spwf_id, removed_size);
-
-                    if(amount < removed_size) { // => `amount < (q->len == removed_size)`, copy only `amount` bytes
-                        memcpy(data, q+1, amount);
-                        ret = amount;
-                    } else { // => `amount >= (removed_size == q->len)`, copy `removed_size` bytes
-                        memcpy(data, q+1, removed_size);
-                        ret = removed_size;
-                    }
-
-                    if(q->len == removed_size) { // remove full packet
-                        if (_packets_end == &(*p)->next) {
-                            _packets_end = p;
-                        }
-                        *p = (*p)->next;
-                        free(q);
-
-                        return ret;
-                    } else { // `removed_size < q->len`, remove only partial packet
-                        q->len -= removed_size;
-                        memmove(q+1, (uint8_t*)(q+1) + removed_size, q->len);
-
-                        return ret;
-                    }
-                } else { // TCP
-                    if (q->len <= amount) { // return and remove full packet
-                        memcpy(data, q+1, q->len);
-
-                        if (_packets_end == &(*p)->next) {
-                            _packets_end = p;
-                        }
-                        *p = (*p)->next;
-                        uint32_t len = q->len;
-                        free(q);
-
-                        /* adjust pending sizes */
-                        _adjust_pending_pkt_sizes(spwf_id, len);
-
-                        return len;
-                    } else { // `q->len > amount`, return only partial packet
-                        if(amount > 0) {
-                            memcpy(data, q+1, amount);
-                            q->len -= amount;
-                            memmove(q+1, (uint8_t*)(q+1) + amount, q->len);
-
-                            /* adjust pending sizes */
-                            _adjust_pending_pkt_sizes(spwf_id, amount);
-                        }
-
-                        return amount;
-                    }
-                }
-            }
-        }
-
-        /* check for pending data on module */
-        {
-            int len;
-
-            len = _read_in_packet(spwf_id);
-            if(len <= 0)  { /* SPWFXX error or no more data to be read */
-                return -1;
-            }
-        }
-    }
-}
-
 #define CLOSE_MAX_RETRY (3)
 bool SPWFSAxx::close(int spwf_id)
 {
@@ -803,7 +681,7 @@ bool SPWFSAxx::close(int spwf_id)
     for(int retry_cnt = 0; retry_cnt < CLOSE_MAX_RETRY; retry_cnt++) {
         // Flush out pending data
         while(true) {
-            int amount = _read_in_packet(spwf_id);
+            int amount = _read_in_pkt(spwf_id, true);
             if(amount < 0) { // SPWFXX error
                 /* empty RX buffer & try to close */
                 empty_rx_buffer();
@@ -915,6 +793,9 @@ void SPWFSAxx::_network_lost_handler_th(void)
     /* set flag to signal network loss */
     _network_lost_flag = true;
 
+    /* force call of (external) callback */
+    _call_callback();
+
     return;
 }
 
@@ -947,6 +828,9 @@ void SPWFSAxx::_packet_handler_th(void)
     if(internal_id != SPWFSA_SOCKET_COUNT) {
         _add_pending_pkt_size(spwf_id, amount);
         _set_pending_data(spwf_id);
+
+        /* force call of (external) callback */
+        _call_callback();
     } else {
         debug_if(true, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
     }
@@ -1103,4 +987,131 @@ void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 void SPWFSAxx::attach(Callback<void()> func)
 {
     _callback_func = func; /* call (external) callback only while not receiving */
+}
+
+/**
+ *  Recv Function
+ */
+int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
+{
+    BH_HANDLER;
+
+    while (true) {
+        /* check if any packets are ready for us */
+        for (struct packet **p = &_packets; *p; p = &(*p)->next) {
+            if ((*p)->id == spwf_id) {
+                debug_if(_dbg_on, "\r\nRead done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                struct packet *q = *p;
+
+                MBED_ASSERT(q->len > 0);
+
+                if(datagram) { // UDP => always remove pkt size
+                    // will always consume a whole pending size
+                    uint32_t ret;
+
+                    debug_if(_dbg_on, "%s():\t\t\t%d:%d (datagram)\r\n", __func__, spwf_id, q->len);
+
+                    ret = (amount < q->len) ? amount : q->len;
+                    memcpy(data, q+1, ret);
+
+                    if (_packets_end == &(*p)->next) {
+                        _packets_end = p;
+                    }
+                    *p = (*p)->next;
+                    free(q);
+
+                    return ret;
+                } else { // TCP
+                    if (q->len <= amount) { // return and remove full packet
+                        memcpy(data, q+1, q->len);
+
+                        if (_packets_end == &(*p)->next) {
+                            _packets_end = p;
+                        }
+                        *p = (*p)->next;
+                        uint32_t len = q->len;
+                        free(q);
+
+                        return len;
+                    } else { // `q->len > amount`, return only partial packet
+                        if(amount > 0) {
+                            memcpy(data, q+1, amount);
+                            q->len -= amount;
+                            memmove(q+1, (uint8_t*)(q+1) + amount, q->len);
+                        }
+
+                        return amount;
+                    }
+                }
+            }
+        }
+
+        /* check for pending data on module */
+        {
+            int len;
+
+            len = _read_in_pkt(spwf_id, false);
+            if(len <= 0)  { /* SPWFXX error or no more data to be read */
+                return -1;
+            }
+        }
+    }
+}
+
+/* Note: returns
+ * '>=0'             in case of success, amount of read in data (in bytes)
+ * 'SPWFXX_ERR_OOM'  in case of "out of memory"
+ * 'SPWFXX_ERR_READ' in case of other `_read_in_packet()` error
+ * 'SPWFXX_ERR_LEN'  in case of `_read_len()` error
+ */
+int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
+    int pending;
+    uint32_t wind_pending;
+
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
+
+    /* betzw - NOTE: this approach requires all WINDs to be reliably delivered!
+               Otherwise we might run into an endless loop! */
+    pending = _read_len(spwf_id);
+    if(close) { // read in all data
+        wind_pending = pending;
+
+        /* reset pending data sizes (now useless) */
+        _reset_pending_pkt_sizes(spwf_id);
+        /* set new entry for entry size */
+        _add_pending_pkt_size(spwf_id, (uint32_t)pending);
+    } else { // only read in already notified data
+        wind_pending = _get_pending_pkt_size(spwf_id);
+    }
+
+    if((pending > 0) && (wind_pending > 0)) {
+        MBED_ASSERT(pending >= (int)wind_pending);
+
+        if(pending == (int)wind_pending) {
+            _clear_pending_data(spwf_id);
+        }
+
+        int ret = _read_in_packet(spwf_id, wind_pending);
+        MBED_ASSERT(ret != 0);
+        if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
+            /* we do not know if data is still pending at this point
+               but leaving the pending data bit set might lead to an endless loop */
+            _clear_pending_data(spwf_id);
+
+            return ret;
+        }
+    } else if(pending < 0) { /* 'SPWFXX_ERR_LEN' error */
+        MBED_ASSERT(pending == SPWFXX_ERR_LEN);
+        /* we do not know if data is still pending at this point
+           but leaving the pending data bit set might lead to an endless loop */
+        _clear_pending_data(spwf_id);
+
+        return pending;
+    } else if(pending == 0) {
+        MBED_ASSERT(wind_pending == 0);
+        _clear_pending_data(spwf_id);
+    }
+
+    return (int)wind_pending;
 }

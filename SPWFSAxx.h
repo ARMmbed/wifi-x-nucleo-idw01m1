@@ -49,22 +49,15 @@
 /* Pending data packets size buffer */
 class SpwfRealPendingPackets {
 public:
-    bool empty(void) {
-        return (first_pkt_ptr == last_pkt_ptr);
-    }
-
     void add(uint32_t new_cum_size) {
-#ifndef NDEBUG
-        if(new_cum_size < cumulative_size) {
-            debug_if(true, "%s():\t\t\t%u:%u\r\n", __func__, new_cum_size, cumulative_size);
-        }
-#endif
+        MBED_ASSERT(new_cum_size >= cumulative_size);
 
-        if(new_cum_size <= cumulative_size) {
+        if(new_cum_size == cumulative_size) {
             /* nothing to do */
             return;
         }
 
+        /* => `new_cum_size > cumulative_size` */
         real_pkt_sizes[last_pkt_ptr] = (uint16_t)(new_cum_size - cumulative_size);
         cumulative_size = new_cum_size;
 
@@ -73,40 +66,34 @@ public:
         MBED_ASSERT(first_pkt_ptr != last_pkt_ptr);
     }
 
-    void update(uint32_t consumed_size) {
-        MBED_ASSERT((consumed_size > 0) && (consumed_size <= cumulative_size));
-
-        cumulative_size -= consumed_size;
-    }
-
-    uint32_t remove(void) {
-        if(empty()) return 0;
-
-        uint32_t ret = real_pkt_sizes[first_pkt_ptr];
-        first_pkt_ptr = (first_pkt_ptr + 1) % PENDING_DATA_SLOTS;
-
-        return ret;
-    }
-
     uint32_t get(void) {
         if(empty()) return 0;
 
         return real_pkt_sizes[first_pkt_ptr];
     }
 
-    void set(uint32_t new_elem_size) {
+    uint32_t remove(uint32_t size) {
         MBED_ASSERT(!empty());
 
-        real_pkt_sizes[last_pkt_ptr] = (uint16_t)new_elem_size;
+        uint32_t ret = real_pkt_sizes[first_pkt_ptr];
+        first_pkt_ptr = (first_pkt_ptr + 1) % PENDING_DATA_SLOTS;
+
+        MBED_ASSERT(ret == size);
+        MBED_ASSERT(ret <= cumulative_size);
+        cumulative_size -= ret;
+
+        return ret;
     }
 
     void reset(void) {
-        first_pkt_ptr = 0;
-        last_pkt_ptr = 0;
-        cumulative_size = 0;
+        bzero(this, sizeof(*this));
     }
 
 private:
+    bool empty(void) {
+        return (first_pkt_ptr == last_pkt_ptr);
+    }
+
     uint16_t real_pkt_sizes[PENDING_DATA_SLOTS];
     uint8_t  first_pkt_ptr;
     uint8_t  last_pkt_ptr;
@@ -324,7 +311,7 @@ private:
     bool _winds_off(void);
     void _winds_on(void);
     void _read_in_pending(void);
-    int _read_in_packet(int spwf_id);
+    int _read_in_pkt(int spwf_id, bool close);
     int _read_in_packet(int spwf_id, uint32_t amount);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
@@ -352,32 +339,8 @@ private:
         _pending_pkt_sizes[spwf_id].add(size);
     }
 
-    void _update_pending_pkt_size(int spwf_id, uint32_t size) {
-        _pending_pkt_sizes[spwf_id].update(size);
-    }
-
-    uint32_t _remove_pending_pkt_size(int spwf_id) {
-        return _pending_pkt_sizes[spwf_id].remove();
-    }
-
-    void _set_pending_pkt_size(int spwf_id, uint32_t size) {
-        if(size > 0) {
-            _pending_pkt_sizes[spwf_id].set(size);
-        }
-    }
-
-    void _adjust_pending_pkt_sizes(int spwf_id, uint32_t consumed_size) {
-        uint32_t removed_size = 0;
-        uint32_t packet_size = _get_pending_pkt_size(spwf_id);
-
-        MBED_ASSERT(consumed_size > 0);
-
-        for(; (packet_size > 0) && ((packet_size + removed_size) <= consumed_size); packet_size = _get_pending_pkt_size(spwf_id)) {
-            removed_size += _remove_pending_pkt_size(spwf_id);
-        };
-
-        MBED_ASSERT((removed_size + packet_size) >= consumed_size);
-        _set_pending_pkt_size(spwf_id, (removed_size + packet_size) - consumed_size);
+    uint32_t _remove_pending_pkt_size(int spwf_id, uint32_t size) {
+        return _pending_pkt_sizes[spwf_id].remove(size);
     }
 
     uint32_t _get_pending_pkt_size(int spwf_id) {

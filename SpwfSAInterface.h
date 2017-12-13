@@ -68,8 +68,8 @@
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
- *  NOTE - betzw - TODO: MUST become singleton!
  */
+//  NOTE - betzw - TODO: MUST become singleton!
 class SpwfSAInterface : public NetworkStack, public WiFiInterface
 {
 public:
