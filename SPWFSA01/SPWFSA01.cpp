@@ -160,6 +160,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
 
     /* read in next line */
+    /* betzw - TODO: support SSIDs with quote characters (i.e. \') inside */
     ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);

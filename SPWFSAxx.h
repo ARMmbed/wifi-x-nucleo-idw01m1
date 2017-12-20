@@ -44,7 +44,7 @@
 #define SPWFSA_MAX_PACKETS          (4)
 #define SPWFSA_SEND_PKTSIZE         (730)
 
-#define PENDING_DATA_SLOTS          (SPWFSA_MAX_PACKETS+1)
+#define PENDING_DATA_SLOTS          (13)
 
 /* Pending data packets size buffer */
 class SpwfRealPendingPackets {

@@ -529,7 +529,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
     }
 
     if(amount > 0) {
-        debug_if(true, "%s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
+        debug_if(_dbg_on, "%s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
     }
 
     MBED_ASSERT(((int)amount) >= 0);
@@ -1071,13 +1071,11 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
                                  Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
 
-    /* betzw - NOTE: this approach requires all WINDs to be reliably delivered!
-               Otherwise we might run into an endless loop! */
-    pending = _read_len(spwf_id);
+    pending = _read_len(spwf_id); // triggers also async indication handling!
     if(close) { // read in all data
         wind_pending = pending;
 
-        /* reset pending data sizes (now useless) */
+        /* reset pending data sizes */
         _reset_pending_pkt_sizes(spwf_id);
         /* set new entry for entry size */
         _add_pending_pkt_size(spwf_id, (uint32_t)pending);
@@ -1110,6 +1108,12 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
         return pending;
     } else if(pending == 0) {
         MBED_ASSERT(wind_pending == 0);
+        _clear_pending_data(spwf_id);
+    } else if(wind_pending == 0) { // `pending > 0`
+        MBED_ASSERT(pending > 0);
+        debug_if(true, "%s():\t\t%d:%d (WIND missing)\r\n", __func__, spwf_id, pending);
+
+        /* avoid potential endless loop & wait for WIND */
         _clear_pending_data(spwf_id);
     }
 
