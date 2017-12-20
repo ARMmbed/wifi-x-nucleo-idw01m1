@@ -434,8 +434,6 @@ private:
 
         _connected_to_network = false;
         _isInitialized = false;
-
-        reset_credentials();
     }
 
 private:

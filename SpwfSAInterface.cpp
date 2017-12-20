@@ -52,6 +52,7 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx,
   _dbg_on(debug)
 {
     inner_constructor();
+    reset_credentials();
 }
 
 /**
@@ -164,8 +165,8 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    _connected_to_network = false;
-    _isInitialized = false;
+    /* NOTE: all sockets are gone */
+    inner_constructor();
 
     return NSAPI_ERROR_OK;
 }
@@ -445,7 +446,7 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
-    if(!_socket_is_open(socket)) return; // might happen after module hard fault
+    if(!_socket_is_open(socket)) return; // might happen e.g. after module hard fault or voluntary disconnection
 
     _cbs[socket->internal_id].callback = callback;
     _cbs[socket->internal_id].data = data;
