@@ -39,6 +39,67 @@
 #define SPWFXX_ERR_LEN              (-3)
 
 
+/* Max number of sockets & packets */
+#define SPWFSA_SOCKET_COUNT         (8)
+#define SPWFSA_MAX_PACKETS          (4)
+#define SPWFSA_SEND_PKTSIZE         (730)
+
+#define PENDING_DATA_SLOTS          (13)
+
+/* Pending data packets size buffer */
+class SpwfRealPendingPackets {
+public:
+    void add(uint32_t new_cum_size) {
+        MBED_ASSERT(new_cum_size >= cumulative_size);
+
+        if(new_cum_size == cumulative_size) {
+            /* nothing to do */
+            return;
+        }
+
+        /* => `new_cum_size > cumulative_size` */
+        real_pkt_sizes[last_pkt_ptr] = (uint16_t)(new_cum_size - cumulative_size);
+        cumulative_size = new_cum_size;
+
+        last_pkt_ptr = (last_pkt_ptr + 1) % PENDING_DATA_SLOTS;
+
+        MBED_ASSERT(first_pkt_ptr != last_pkt_ptr);
+    }
+
+    uint32_t get(void) {
+        if(empty()) return 0;
+
+        return real_pkt_sizes[first_pkt_ptr];
+    }
+
+    uint32_t remove(uint32_t size) {
+        MBED_ASSERT(!empty());
+
+        uint32_t ret = real_pkt_sizes[first_pkt_ptr];
+        first_pkt_ptr = (first_pkt_ptr + 1) % PENDING_DATA_SLOTS;
+
+        MBED_ASSERT(ret == size);
+        MBED_ASSERT(ret <= cumulative_size);
+        cumulative_size -= ret;
+
+        return ret;
+    }
+
+    void reset(void) {
+        bzero(this, sizeof(*this));
+    }
+
+private:
+    bool empty(void) {
+        return (first_pkt_ptr == last_pkt_ptr);
+    }
+
+    uint16_t real_pkt_sizes[PENDING_DATA_SLOTS];
+    uint8_t  first_pkt_ptr;
+    uint8_t  last_pkt_ptr;
+    uint32_t cumulative_size;
+};
+
 class SpwfSAInterface;
 
 /** SPWFSAxx Interface class.
@@ -128,9 +189,10 @@ public:
      * @param id id to receive from
      * @param data placeholder for returned information
      * @param amount number of bytes to be received
+     * @param datagram receive a datagram packet
      * @return the number of bytes received
      */
-    int32_t recv(int id, void *data, uint32_t amount);
+    int32_t recv(int id, void *data, uint32_t amount, bool datagram);
 
     /**
      * Closes a socket
@@ -171,13 +233,18 @@ public:
 private:
     UARTSerial _serial;
     ATCmdParser _parser;
+
     DigitalOut _wakeup;
     DigitalOut _reset;
     PinName _rts;
     PinName _cts;
+
     int _timeout;
     bool _dbg_on;
+
     int _pending_sockets_bitmap;
+    SpwfRealPendingPackets _pending_pkt_sizes[SPWFSA_SOCKET_COUNT];
+
     bool _network_lost_flag;
     SpwfSAInterface &_associated_interface;
 
@@ -244,8 +311,8 @@ private:
     bool _winds_off(void);
     void _winds_on(void);
     void _read_in_pending(void);
-    int _read_in_packet(int spwf_id);
-    int _read_in_packet(int spwf_id, int amount);
+    int _read_in_pkt(int spwf_id, bool close);
+    int _read_in_packet(int spwf_id, uint32_t amount);
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
@@ -268,21 +335,37 @@ private:
         return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
-    bool _is_data_pending(void) {
-        if(_pending_sockets_bitmap != 0) return true;
-        else return false;
+    void _add_pending_pkt_size(int spwf_id, uint32_t size) {
+        _pending_pkt_sizes[spwf_id].add(size);
     }
 
-    void _set_pending_data(int spwf_id) {
-        _pending_sockets_bitmap |= (1 << spwf_id);
+    uint32_t _remove_pending_pkt_size(int spwf_id, uint32_t size) {
+        return _pending_pkt_sizes[spwf_id].remove(size);
     }
 
-    void _clear_pending_data(int spwf_id) {
+    uint32_t _get_pending_pkt_size(int spwf_id) {
+        return _pending_pkt_sizes[spwf_id].get();
+    }
+
+   void _reset_pending_pkt_sizes(int spwf_id) {
+        _pending_pkt_sizes[spwf_id].reset();
+    }
+
+   void _set_pending_data(int spwf_id) {
+       _pending_sockets_bitmap |= (1 << spwf_id);
+   }
+
+   void _clear_pending_data(int spwf_id) {
         _pending_sockets_bitmap &= ~(1 << spwf_id);
     }
 
     bool _is_data_pending(int spwf_id) {
         return (_pending_sockets_bitmap & (1 << spwf_id)) ? true : false;
+    }
+
+    bool _is_data_pending(void) {
+        if(_pending_sockets_bitmap != 0) return true;
+        else return false;
     }
 
     void _packet_handler_bh(void) {

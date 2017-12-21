@@ -142,6 +142,8 @@ int SPWFSA04::_read_in(char* buffer, int spwf_id, uint32_t amount) {
         debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
     }
 
+    debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+
     /* unblock asynchronous indications */
     _winds_on();
 
@@ -177,6 +179,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
     /* read in next line */
+    /* betzw - TODO: support SSIDs with quote characters (i.e. \') inside */
     ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);

@@ -52,6 +52,7 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx,
   _dbg_on(debug)
 {
     inner_constructor();
+    reset_credentials();
 }
 
 /**
@@ -164,8 +165,8 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    _connected_to_network = false;
-    _isInitialized = false;
+    /* NOTE: all sockets are gone */
+    inner_constructor();
 
     return NSAPI_ERROR_OK;
 }
@@ -346,24 +347,29 @@ nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *dat
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
+    return _socket_recv(handle, data, size, false);
+}
+
+nsapi_size_or_error_t SpwfSAInterface::_socket_recv(void *handle, void *data, unsigned size, bool datagram)
+{
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
     CHECK_NOT_CONNECTED_ERR();
 
     if(!_socket_might_have_data(socket)) {
-        return NSAPI_ERROR_CONNECTION_LOST;
+        return 0;
     }
 
     _spwf.setTimeout(SPWF_RECV_TIMEOUT);
 
-    int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size);
+    int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size, datagram);
 
     MBED_ASSERT((recv != 0) || (size == 0));
 
     if (recv < 0) {
         if(!_socket_is_still_connected(socket)) {
             socket->no_more_data = true;
-            return NSAPI_ERROR_CONNECTION_LOST;
+            return 0;
         }
 
         return NSAPI_ERROR_WOULD_BLOCK;
@@ -421,7 +427,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddre
 
     CHECK_NOT_CONNECTED_ERR();
 
-    ret = socket_recv(socket, data, size);
+    ret = _socket_recv(socket, data, size, true);
     if (ret >= 0 && addr) {
         *addr = socket->addr;
     }
@@ -440,7 +446,7 @@ void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
 
-    if(!_socket_is_open(socket)) return; // might happen after module hard fault
+    if(!_socket_is_open(socket)) return; // might happen e.g. after module hard fault or voluntary disconnection
 
     _cbs[socket->internal_id].callback = callback;
     _cbs[socket->internal_id].data = data;

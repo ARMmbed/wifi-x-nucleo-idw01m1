@@ -51,18 +51,15 @@
 #error No (valid) Wi-Fi exapnsion board defined (MBED_CONF_IDW0XX1_EXPANSION_BOARD: options are IDW01M1 and IDW04A1)
 #endif
 
-/* Max number of sockets */
-#define SPWFSA_SOCKET_COUNT 8
-
 // Various timeouts for different SPWF operations
 #define SPWF_CONNECT_TIMEOUT    60000
 #define SPWF_DISCONNECT_TIMEOUT 30002
 #define SPWF_HF_TIMEOUT         30001
 #define SPWF_NETLOST_TIMEOUT    30000
 #define SPWF_READ_BIN_TIMEOUT   13000
+#define SPWF_CLOSE_TIMEOUT      10001
 #define SPWF_SEND_TIMEOUT       10000
 #define SPWF_INIT_TIMEOUT       8000
-#define SPWF_CLOSE_TIMEOUT      5003
 #define SPWF_OPEN_TIMEOUT       5002
 #define SPWF_CONN_SND_TIMEOUT   5001
 #define SPWF_SCAN_TIMEOUT       5000
@@ -71,8 +68,8 @@
 
 /** SpwfSAInterface class
  *  Implementation of the NetworkStack for the SPWF Device
- *  NOTE - betzw - TODO: MUST become singleton!
  */
+//  NOTE - betzw - TODO: MUST become singleton!
 class SpwfSAInterface : public NetworkStack, public WiFiInterface
 {
 public:
@@ -261,7 +258,7 @@ private:
      *  @param size         The length of the buffer to send
      *  @return             Number of written bytes on success, negative on failure
      *  @note This call is not-blocking, if this call would block, must
-     *        immediately return NSAPI_ERROR_WOULD_WAIT
+     *        immediately return NSAPI_ERROR_WOULD_BLOCK
      */
     virtual nsapi_size_or_error_t socket_send(void *handle, const void *data, unsigned size);
 
@@ -271,7 +268,7 @@ private:
      *  @param size         The maximum length of the buffer
      *  @return             Number of received bytes on success, negative on failure
      *  @note This call is not-blocking, if this call would block, must
-     *        immediately return NSAPI_ERROR_WOULD_WAIT
+     *        immediately return NSAPI_ERROR_WOULD_BLOCK
      */
     virtual nsapi_size_or_error_t socket_recv(void *handle, void *data, unsigned size);
 
@@ -282,7 +279,7 @@ private:
      *  @param size         The length of the packet to be sent
      *  @return             The number of written bytes on success, negative on failure
      *  @note This call is not-blocking, if this call would block, must
-     *        immediately return NSAPI_ERROR_WOULD_WAIT
+     *        immediately return NSAPI_ERROR_WOULD_BLOCK
      */
     virtual nsapi_size_or_error_t socket_sendto(void *handle, const SocketAddress &address, const void *data, unsigned size);
 
@@ -295,7 +292,7 @@ private:
      *  @param size         The length of the buffer
      *  @return             The number of received bytes on success, negative on failure
      *  @note This call is not-blocking, if this call would block, must
-     *        immediately return NSAPI_ERROR_WOULD_WAIT
+     *        immediately return NSAPI_ERROR_WOULD_BLOCK
      */
     virtual nsapi_size_or_error_t socket_recvfrom(void *handle, SocketAddress *address, void *buffer, unsigned size);
 
@@ -406,6 +403,8 @@ private:
 private:
     void event(void);
     nsapi_error_t init(void);
+    nsapi_size_or_error_t _socket_recv(void *handle, void *data, unsigned size, bool datagram);
+
 
     int get_internal_id(int spwf_id) { // checks also if `spwf_id` is (still) "valid"
         if(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)) { // valid `spwf_id`
@@ -435,8 +434,6 @@ private:
 
         _connected_to_network = false;
         _isInitialized = false;
-
-        reset_credentials();
     }
 
 private:
