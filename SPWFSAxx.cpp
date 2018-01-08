@@ -37,7 +37,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
 {
-    bzero(_pending_pkt_sizes, sizeof(_pending_pkt_sizes));
+    memset(_pending_pkt_sizes, 0, sizeof(_pending_pkt_sizes));
 
     _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));

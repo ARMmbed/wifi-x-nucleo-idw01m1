@@ -86,7 +86,7 @@ public:
     }
 
     void reset(void) {
-        bzero(this, sizeof(*this));
+        memset(this, 0, sizeof(*this));
     }
 
 private:
