@@ -44,12 +44,12 @@ All configuration options mentioned in this section are optional and when requir
 
 Beyond you can find the list of available configuration macros each with a short explanation:
  * `IDW04A1_WIFI_HW_BUG_WA`: activates the HW bug workaround for `IDW04A1`
- * `SPWFSAXX_WAKEUP_PIN`:    defines module wakeup pin (requires value) 
- * `SPWFSAXX_RESET_PIN`:     defines module reset pin (requires value) 
- * `SPWFSAXX_RTS_PIN`:       defines RTS pin of the UART device used (requires value) 
- * `SPWFSAXX_CTS_PIN`:       defines CTS pin of the UART device used (requires value) 
+ * `SPWFSAXX_WAKEUP_PIN`:    defines module wakeup pin _(requires value)_ 
+ * `SPWFSAXX_RESET_PIN`:     defines module reset pin _(requires value)_ 
+ * `SPWFSAXX_RTS_PIN`:       defines RTS pin of the UART device used _(requires value)_ 
+ * `SPWFSAXX_CTS_PIN`:       defines CTS pin of the UART device used _(requires value)_ 
 
-**Note**: if the values of both `SPWFSAXX_RTS_PIN` and `SPWFSAXX_CTS_PIN` are different from `NC` hardware flow control (if available on your development board) will be enabled on the used UART device (provided you are using `mbed-os` version greater than or equal to `v5.7.0`).
+**Note**: if the values of both `SPWFSAXX_RTS_PIN` and `SPWFSAXX_CTS_PIN` are different from `NC`, hardware flow control - if available on your development board - will be enabled on the used UART device (provided you are using `mbed-os` version greater than or equal to `v5.7.0`).
 
 
 ## Firmware upgrade
