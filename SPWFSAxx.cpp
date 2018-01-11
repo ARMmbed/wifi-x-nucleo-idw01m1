@@ -631,7 +631,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
         debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_READ;
     } else {
-        debug_if(true, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+        debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
 
         /* append to packet list */
         *_packets_end = packet;
@@ -815,7 +815,7 @@ void SPWFSAxx::_packet_handler_th(void)
         return;
     }
 
-    debug_if(true, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
+    debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d\r\n", spwf_id, amount);
 
     /* check for the module to report a valid id */
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
@@ -1111,7 +1111,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
         _clear_pending_data(spwf_id);
     } else if(wind_pending == 0) { // `pending > 0`
         MBED_ASSERT(pending > 0);
-        debug_if(true, "%s():\t\t%d:%d (WIND missing)\r\n", __func__, spwf_id, pending);
+        debug_if(_dbg_on, "%s():\t\t%d:%d (WIND missing)\r\n", __func__, spwf_id, pending);
 
         /* avoid potential endless loop & wait for WIND */
         _clear_pending_data(spwf_id);
