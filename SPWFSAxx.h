@@ -142,7 +142,7 @@ public:
     /**
      * Get the IP address of SPWFSAxx
      *
-     * @return null-teriminated IP address or null if no IP address is assigned
+     * @return null-terminated IP address or null if no IP address is assigned
      */
     const char *getIPAddress(void);
 
@@ -156,14 +156,14 @@ public:
     /** Get the local gateway
      *
      *  @return         Null-terminated representation of the local gateway
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     const char *getGateway(void);
 
     /** Get the local network mask
      *
      *  @return         Null-terminated representation of the local network mask
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     const char *getNetmask(void);
 
