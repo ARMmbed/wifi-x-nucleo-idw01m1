@@ -117,15 +117,15 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
             if(_recv_ok()) {
                 ret = amount;
             } else {
-                debug_if(_dbg_on, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
+                debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
                 empty_rx_buffer();
             }
         } else {
-            debug_if(_dbg_on, "%s(%d): failed to read binary data\r\n", __func__, __LINE__);
+            debug_if(true, "%s(%d): failed to read binary data (%u:%d)\r\n", __func__, __LINE__, amount, read);
             empty_rx_buffer();
         }
     } else {
-        debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
+        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
     }
 
     debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);

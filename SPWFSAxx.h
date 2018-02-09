@@ -42,13 +42,17 @@
 /* Max number of sockets & packets */
 #define SPWFSA_SOCKET_COUNT         (8)
 #define SPWFSA_MAX_PACKETS          (4)
-#define SPWFSA_SEND_PKTSIZE         (730)
+#define SPWFSA_SEND_RECV_PKTSIZE    (730)
 
 #define PENDING_DATA_SLOTS          (13)
 
 /* Pending data packets size buffer */
 class SpwfRealPendingPackets {
 public:
+    SpwfRealPendingPackets() {
+        reset();
+    }
+
     void add(uint32_t new_cum_size) {
         MBED_ASSERT(new_cum_size >= cumulative_size);
 
@@ -91,7 +95,11 @@ public:
 
 private:
     bool empty(void) {
-        return (first_pkt_ptr == last_pkt_ptr);
+        if(first_pkt_ptr == last_pkt_ptr) {
+            MBED_ASSERT(cumulative_size == 0);
+            return true;
+        }
+        return false;
     }
 
     uint16_t real_pkt_sizes[PENDING_DATA_SLOTS];
@@ -316,6 +324,7 @@ private:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
+    void _process_winds();
 
     virtual int _read_in(char*, int, uint32_t) = 0;
 
