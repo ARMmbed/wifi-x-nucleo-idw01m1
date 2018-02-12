@@ -35,6 +35,27 @@
 
 #include "SpwfSAInterface.h"
 #include "mbed_debug.h"
+#include "BlockExecuter.h"
+
+#if MBED_CONF_RTOS_PRESENT
+static Mutex _spwf_mutex; // assuming a recursive mutex
+static void _spwf_lock() { (void)(_spwf_mutex.lock()); }
+static void _spwf_unlock() { (void)(_spwf_mutex.unlock()); }
+
+/* Make compiler happy */
+static inline void _dummy(void) {
+    /* betzw: make compiler happy */
+    void *_dummy_var = (void*)&_spwf_lock;
+    _dummy_var = (void*)&_spwf_unlock;
+    (void)_dummy_var;
+}
+
+#define SYNC_HANDLER \
+        BlockExecuter sync_handler(Callback<void()>(&_spwf_unlock), Callback<void()>(&_spwf_lock))
+#else
+#define SYNC_HANDLER
+#endif
+
 
 /**
  * @brief  SpwfSAInterface constructor
@@ -75,6 +96,7 @@ nsapi_error_t SpwfSAInterface::connect(void)
 {
     int mode;
     char *pass_phrase = ap_pass;
+    SYNC_HANDLER;
 
     // check for valid SSID
     if(ap_ssid[0] == '\0') {
@@ -140,6 +162,7 @@ nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi
                                        uint8_t channel)
 {
     nsapi_error_t ret;
+    SYNC_HANDLER;
 
     if (channel != 0) {
         return NSAPI_ERROR_UNSUPPORTED;
@@ -159,6 +182,8 @@ nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi
  */
 nsapi_error_t SpwfSAInterface::disconnect(void)
 {
+    SYNC_HANDLER;
+
     _spwf.setTimeout(SPWF_DISCONNECT_TIMEOUT);
 
     if (!_spwf.disconnect()) {
@@ -179,6 +204,8 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
  */
 const char *SpwfSAInterface::get_ip_address(void)
 {
+    SYNC_HANDLER;
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getIPAddress();
 }
@@ -191,12 +218,16 @@ const char *SpwfSAInterface::get_ip_address(void)
  */
 const char *SpwfSAInterface::get_mac_address(void)
 {
+    SYNC_HANDLER;
+
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
     return _spwf.getMACAddress();
 }
 
 const char *SpwfSAInterface::get_gateway(void)
 {
+    SYNC_HANDLER;
+
     if(!_connected_to_network) return NULL;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
@@ -205,6 +236,8 @@ const char *SpwfSAInterface::get_gateway(void)
 
 const char *SpwfSAInterface::get_netmask(void)
 {
+    SYNC_HANDLER;
+
     if(!_connected_to_network) return NULL;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
@@ -220,6 +253,7 @@ const char *SpwfSAInterface::get_netmask(void)
 nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
     int internal_id;
+    SYNC_HANDLER;
 
     for (internal_id = 0; internal_id < SPWFSA_SOCKET_COUNT; internal_id++) {
         if(_ids[internal_id].internal_id == SPWFSA_SOCKET_COUNT) break;
@@ -251,6 +285,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
 nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
+    SYNC_HANDLER;
 
     MBED_ASSERT(((unsigned int)socket->internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
@@ -295,6 +330,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     int internal_id = socket->internal_id;
+    SYNC_HANDLER;
 
     if(!_socket_is_open(internal_id)) return NSAPI_ERROR_NO_SOCKET;
 
@@ -322,6 +358,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
+    SYNC_HANDLER;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -347,6 +384,8 @@ nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *dat
  */
 nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
+    SYNC_HANDLER;
+
     return _socket_recv(handle, data, size, false);
 }
 
@@ -389,6 +428,7 @@ nsapi_size_or_error_t SpwfSAInterface::_socket_recv(void *handle, void *data, un
 nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
+    SYNC_HANDLER;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -424,6 +464,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddre
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t ret;
+    SYNC_HANDLER;
 
     CHECK_NOT_CONNECTED_ERR();
 
@@ -445,6 +486,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddre
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
+    SYNC_HANDLER;
 
     if(!_socket_is_open(socket)) return; // might happen e.g. after module hard fault or voluntary disconnection
 
@@ -462,6 +504,8 @@ void SpwfSAInterface::event(void) {
 
 nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pass, nsapi_security_t security)
 {
+    SYNC_HANDLER;
+
     if(ssid == NULL) {
         return NSAPI_ERROR_PARAMETER;
     }
@@ -494,6 +538,8 @@ nsapi_error_t SpwfSAInterface::set_channel(uint8_t channel)
 
 int8_t SpwfSAInterface::get_rssi(void)
 {
+    SYNC_HANDLER;
+
     if(!_connected_to_network) return 0;
 
     _spwf.setTimeout(SPWF_MISC_TIMEOUT);
@@ -502,6 +548,8 @@ int8_t SpwfSAInterface::get_rssi(void)
 
 nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count)
 {
+    SYNC_HANDLER;
+
     nsapi_size_or_error_t ret;
 
     //initialize the device before scanning
