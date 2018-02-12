@@ -141,6 +141,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     bool ret;
     unsigned int channel;
     int trials;
+    size_t first_half;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
@@ -160,26 +161,40 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
 
     /* read in next line */
-    /* betzw - TODO: support SSIDs with quote characters (i.e. \') inside */
-    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
+    ssid_buf[sizeof(ssid_buf)] = '\0'; // just to be sure
+    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%128[^\']\'" /* WAS: CAPS:" */,
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);
 
-    if(ret) { // ret == true
-        int value;
+    if(ret) {
+        first_half = strlen(ssid_buf);
+    }
+
+    if(ret && (ret = _parser.recv("%127[\r]", &ssid_buf[first_half]) && _recv_delim_cr_lf())) { // ret == true
+        char value;
+        char *rest;
+
+        /* decide about position of `CAPS:` */
+        rest = strstr(&ssid_buf[first_half], "CAPS:");
+        if(rest == NULL) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            goto recv_ap_get_out;
+        }
 
         /* copy values */
         memcpy(&ap->ssid, ssid_buf, 32);
         ap->ssid[32] = '\0';
         ap->channel = channel;
 
-        /* skip 'CAPS' */
-        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 ")
-            _parser.getc();
-        }
+        /* skip `CAPS 0421 ` */
+        rest += 10;
 
         /* get next character */
-        value = _parser.getc();
+        if(strlen(rest) <= 0) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            goto recv_ap_get_out;
+        }
+        value = *rest++;
         if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
             goto recv_ap_get_out;
@@ -189,7 +204,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s%*[\x20]", (char*)&buffer)) {
+            if(!(sscanf(rest, "%s%*[\x20]", (char*)&buffer) > 0) /* WAS: _parser.recv("%s%*[\x20]", (char*)&buffer) */) { // '\0x20' == <space>
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
@@ -202,8 +217,9 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             }
 
             /* got a "WPA", check for "WPA2" */
-            value = _parser.getc();
-            if(value == _cr_) { // no further protocol
+            rest += strlen(buffer);
+            value = *rest++;
+            if(value == '\0') { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
                 goto recv_ap_get_out;
             } else { // assume "WPA2"
@@ -216,6 +232,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
 recv_ap_get_out:
+#if 0 // betzw: not necessary anymore
     if(ret) { // ret == true
         /* wait for next line feed */
         trials = 0;
@@ -227,6 +244,7 @@ recv_ap_get_out:
             }
         }
     }
+#endif // 0/1
 
     return ret;
 }
