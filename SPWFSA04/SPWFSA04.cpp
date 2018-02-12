@@ -171,7 +171,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     /* run to 'horizontal tab' */
     trials = 0;
     while(_parser.getc() != '\x09') {
-        if(++trials >= SPWFXX_MAX_TRIALS) {
+        if(trials++ > SPWFXX_MAX_TRIALS) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
@@ -179,26 +179,63 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
     /* read in next line */
-    /* betzw - TODO: support SSIDs with quote characters (i.e. \') inside */
-    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%256[^\']\' CAPS:",
+    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%255[^\']\'",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);
 
     if(ret) { // ret == true
-        int value;
+        char value;
+        char *rest;
+        int val_getc;
+        unsigned int i;
+        size_t first_half;
+
+        /* read in rest of line */
+        first_half = strlen(ssid_buf);
+        for(i = first_half; i < sizeof(ssid_buf); i++) {
+            val_getc = _parser.getc();
+            ssid_buf[i] = (char)val_getc;
+            if(val_getc < 0) {
+                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+                goto recv_ap_get_out;
+            } else if(val_getc == _cr_) { // '\r'
+                val_getc = _parser.getc();
+                if('\n' != (char)val_getc) {
+                    debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+                    goto recv_ap_get_out;
+                }
+                break;
+            } else if(val_getc == _lf_) { // '\n'; betzw: WORK-AROUND module FW issues
+                break;
+            }
+        }
+        ssid_buf[i] = '\0';
+
+        /* decide about position of `CAPS:` */
+        rest = strstr(&ssid_buf[first_half], "CAPS:");
+        if(rest == NULL) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            goto recv_ap_get_out;
+        }
+
+        /* substitute <space> with '\0' */
+        MBED_ASSERT(rest > &ssid_buf[0]);
+        rest[-1] = '\0';
 
         /* copy values */
         memcpy(&ap->ssid, ssid_buf, 32);
         ap->ssid[32] = '\0';
         ap->channel = channel;
 
-        /* skip 'CAPS' */
-        for(int i = 0; i < 6; i++) { // read next six characters (" 0421 ")
-            _parser.getc();
+        /* skip `CAPS: 0421 ` */
+        if(strlen(rest) < 11) {
+            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            goto recv_ap_get_out;
         }
+        rest += 11;
 
         /* get next character */
-        value = _parser.getc();
+        value = *rest++;
         if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
             goto recv_ap_get_out;
@@ -208,7 +245,7 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!_parser.recv("%s%*[\x20]", (char*)&buffer)) {
+            if(!(sscanf(rest, "%s%*[\x20]", (char*)&buffer) > 0)) { // '\0x20' == <space>
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
@@ -221,8 +258,9 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
             }
 
             /* got a "WPA", check for "WPA2" */
-            value = _parser.getc();
-            if(value == _cr_) { // no further protocol
+            rest += strlen(buffer);
+            value = *rest++;
+            if(value == '\0') { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
                 goto recv_ap_get_out;
             } else { // assume "WPA2"
@@ -236,19 +274,6 @@ bool SPWFSA04::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
 recv_ap_get_out:
-    if(ret) { // ret == true
-        /* wait for next line feed */
-        trials = 0;
-        while(!_recv_delim_lf()) {
-            if(++trials >= SPWFXX_MAX_TRIALS) {
-                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-                empty_rx_buffer();
-                ret = false;
-                break;
-            }
-        }
-    }
-
     return ret;
 }
 

@@ -141,7 +141,6 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     bool ret;
     unsigned int channel;
     int trials;
-    size_t first_half;
 
     ap->security = NSAPI_SECURITY_UNKNOWN;
 
@@ -159,20 +158,38 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         }
     }
 
-
     /* read in next line */
-    ssid_buf[sizeof(ssid_buf)] = '\0'; // just to be sure
-    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%128[^\']\'" /* WAS: CAPS:" */,
+    ret = _parser.recv(" %*s %hhx:%hhx:%hhx:%hhx:%hhx:%hhx CHAN: %u RSSI: %hhd SSID: \'%255[^\']\'",
                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
                        &channel, &ap->rssi, ssid_buf);
 
-    if(ret) {
-        first_half = strlen(ssid_buf);
-    }
-
-    if(ret && (ret = _parser.recv("%127[\r]", &ssid_buf[first_half]) && _recv_delim_cr_lf())) { // ret == true
+    if(ret) { // ret == true
         char value;
         char *rest;
+        int val_getc;
+        unsigned int i;
+        size_t first_half;
+
+        /* read in rest of line */
+        first_half = strlen(ssid_buf);
+        for(i = first_half; i < sizeof(ssid_buf); i++) {
+            val_getc = _parser.getc();
+            ssid_buf[i] = (char)val_getc;
+            if(val_getc < 0) {
+                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+                goto recv_ap_get_out;
+            } else if(val_getc == _cr_) { // '\r'
+                val_getc = _parser.getc();
+                if('\n' != (char)val_getc) {
+                    debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+                    goto recv_ap_get_out;
+                }
+                break;
+            } else if(val_getc == _lf_) { // '\n'; betzw: WORK-AROUND module FW issues
+                break;
+            }
+        }
+        ssid_buf[i] = '\0';
 
         /* decide about position of `CAPS:` */
         rest = strstr(&ssid_buf[first_half], "CAPS:");
@@ -181,19 +198,23 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             goto recv_ap_get_out;
         }
 
+        /* substitute <space> with '\0' */
+        MBED_ASSERT(rest > &ssid_buf[0]);
+        rest[-1] = '\0';
+
         /* copy values */
         memcpy(&ap->ssid, ssid_buf, 32);
         ap->ssid[32] = '\0';
         ap->channel = channel;
 
-        /* skip `CAPS 0421 ` */
-        rest += 10;
-
-        /* get next character */
-        if(strlen(rest) <= 0) {
+        /* skip `CAPS: 0421 ` */
+        if(strlen(rest) < 11) {
             debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
             goto recv_ap_get_out;
         }
+        rest += 11;
+
+        /* get next character */
         value = *rest++;
         if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
@@ -204,7 +225,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         {
             char buffer[10];
 
-            if(!(sscanf(rest, "%s%*[\x20]", (char*)&buffer) > 0) /* WAS: _parser.recv("%s%*[\x20]", (char*)&buffer) */) { // '\0x20' == <space>
+            if(!(sscanf(rest, "%s%*[\x20]", (char*)&buffer) > 0)) { // '\0x20' == <space>
                 goto recv_ap_get_out;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
@@ -232,20 +253,6 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     }
 
 recv_ap_get_out:
-#if 0 // betzw: not necessary anymore
-    if(ret) { // ret == true
-        /* wait for next line feed */
-        trials = 0;
-        while(!_recv_delim_lf()) {
-            if(trials++ > SPWFXX_MAX_TRIALS) {
-                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-                ret = false;
-                break;
-            }
-        }
-    }
-#endif // 0/1
-
     return ret;
 }
 
@@ -254,7 +261,7 @@ int SPWFSA01::scan(WiFiAccessPoint *res, unsigned limit)
     unsigned cnt = 0;
     nsapi_wifi_ap_t ap;
 
-    if (!_parser.send("AT+S.SCAN")) {
+    if (!_parser.send("AT+S.SCAN=a,s")) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 

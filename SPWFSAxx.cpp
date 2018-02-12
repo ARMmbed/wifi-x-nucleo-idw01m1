@@ -497,9 +497,9 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > SPWFSA_SEND_RECV_PKTSIZE) ? SPWFSA_SEND_RECV_PKTSIZE : amount;
+    for(to_send = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
             sent < amount;
-            to_send = ((amount - sent) > SPWFSA_SEND_RECV_PKTSIZE) ? SPWFSA_SEND_RECV_PKTSIZE : (amount - sent)) {
+            to_send = ((amount - sent) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - sent)) {
         {
             BH_HANDLER;
 
@@ -634,9 +634,9 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     uint32_t recv = 0U, to_recv;
     bool ret = true;
 
-    for(to_recv = (amount > SPWFSA_SEND_RECV_PKTSIZE) ? SPWFSA_SEND_RECV_PKTSIZE : amount;
+    for(to_recv = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
             recv < amount;
-            to_recv = ((amount - recv) > SPWFSA_SEND_RECV_PKTSIZE) ? SPWFSA_SEND_RECV_PKTSIZE : (amount - recv)) {
+            to_recv = ((amount - recv) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - recv)) {
         {
             if (!(_read_in(((char*)(packet + 1) + recv), spwf_id, to_recv) > 0)
                     /* WAS: _parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_recv)

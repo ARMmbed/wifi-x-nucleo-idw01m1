@@ -24,7 +24,7 @@
 /* Common SPWFSAxx macros */
 #define SPWFXX_WINDS_LOW_ON         "0x00000000"
 #define SPWFXX_DEFAULT_BAUD_RATE    115200
-#define SPWFXX_MAX_TRIALS           100
+#define SPWFXX_MAX_TRIALS           3
 
 #if !defined(SPWFSAXX_RTS_PIN)
 #define SPWFSAXX_RTS_PIN    NC
@@ -42,7 +42,6 @@
 /* Max number of sockets & packets */
 #define SPWFSA_SOCKET_COUNT         (8)
 #define SPWFSA_MAX_PACKETS          (4)
-#define SPWFSA_SEND_RECV_PKTSIZE    (730)
 
 #define PENDING_DATA_SLOTS          (13)
 
