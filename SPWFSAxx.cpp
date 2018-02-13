@@ -497,6 +497,7 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
+    /* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
     for(to_send = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
             sent < amount;
             to_send = ((amount - sent) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - sent)) {
@@ -631,31 +632,10 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     packet->len = amount;
     packet->next = 0;
 
-    uint32_t recv = 0U, to_recv;
-    bool ret = true;
-
-    for(to_recv = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
-            recv < amount;
-            to_recv = ((amount - recv) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - recv)) {
-        {
-            if (!(_read_in(((char*)(packet + 1) + recv), spwf_id, to_recv) > 0)
-                    /* WAS: _parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_recv)
-                    && (_parser.write(((char*)data)+recv, (int)to_recv) == (int)to_recv)
-                    && _recv_ok()) */
-                    ) {
-                ret = false;
-                break;
-            }
-        }
-
-        recv += to_recv;
-    }
-
     /* read data in */
-    if(!ret) {
+    if(!(_read_in((char*)(packet + 1), spwf_id, amount) > 0)) {
         free(packet);
         debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
-
         return SPWFXX_ERR_READ;
     } else {
         debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
@@ -663,9 +643,6 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
         /* append to packet list */
         *_packets_end = packet;
         _packets_end = &packet->next;
-
-        /* remove from pending sizes */
-        _remove_pending_pkt_size(spwf_id, amount);
 
         /* force call of (external) callback */
         _call_callback();
@@ -696,7 +673,6 @@ void SPWFSAxx::_free_all_packets() {
     }
 }
 
-#define CLOSE_MAX_RETRY (3)
 bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
@@ -705,7 +681,7 @@ bool SPWFSAxx::close(int spwf_id)
         goto close_bh_handling; // `ret == false`
     }
 
-    for(int retry_cnt = 0; retry_cnt < CLOSE_MAX_RETRY; retry_cnt++) {
+    for(int retry_cnt = 0; retry_cnt < SPWFXX_MAX_TRIALS; retry_cnt++) {
         // Flush out pending data
         while(true) {
             int amount = _read_in_pkt(spwf_id, true);
@@ -826,6 +802,30 @@ void SPWFSAxx::_network_lost_handler_th(void)
     return;
 }
 
+/* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
+void SPWFSAxx::_add_pending_packet_sz(int spwf_id, uint32_t size) {
+    uint32_t to_add;
+    uint32_t added = _get_cumulative_size(spwf_id);
+
+    if(size <= added) { // might happen due to delayed WIND delivery
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        return;
+    }
+
+    for(to_add = ((size - added) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (size - added);
+            added < size;
+            to_add = ((size - added) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (size - added)) {
+        _add_pending_pkt_size(spwf_id, added + to_add);
+        added += to_add;
+    }
+
+    /* force call of (external) callback */
+    _call_callback();
+
+    /* set that data is pending */
+    _set_pending_data(spwf_id);
+}
+
 /*
  * Handling oob ("+WIND:55:Pending Data")
  */
@@ -853,14 +853,10 @@ void SPWFSAxx::_packet_handler_th(void)
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
     if(internal_id != SPWFSA_SOCKET_COUNT) {
-        _add_pending_pkt_size(spwf_id, amount);
-        _set_pending_data(spwf_id);
-
         debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d - #2\r\n", spwf_id, amount);
-        MBED_ASSERT(_get_pending_pkt_size(spwf_id) != 0);
+        _add_pending_packet_sz(spwf_id, amount);
 
-        /* force call of (external) callback */
-        _call_callback();
+        MBED_ASSERT(_get_pending_pkt_size(spwf_id) != 0);
     } else {
         debug_if(true, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
     }
@@ -1091,17 +1087,23 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 void SPWFSAxx::_process_winds(void) {
     do {
         if(readable()) {
-            if(_recv_delim_cr_lf()) { // betzw - TODO: check if this is also necessary for IDW04A1
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+            if(_recv_delim_cr_lf()) // betzw: only necessary for `IDW01M1`
+#endif
+            {
                 if(_parser.process_oob()) {
                     /* something to do? */;
                 } else {
                     debug_if(true, "%s():\t\tNo oob's found!\r\n", __func__);
                     return; // no oob's found
                 }
-            } else {
+            }
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+            else {
                 debug_if(true, "%s():\t\tNo delimiters found!\r\n", __func__);
                 return; // no leading delimiters
             }
+#endif
         } else {
             return; // no more data in buffer
         }
@@ -1140,9 +1142,11 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
 
                 if(wind_pending == 0) {
                     /* betzw - WORK AROUND module FW issues: set new entry for pending size */
-                    _add_pending_pkt_size(spwf_id, (uint32_t)pending);
-                    wind_pending = pending;
                     debug_if(true, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
+                    _add_pending_packet_sz(spwf_id, (uint32_t)pending);
+
+                    wind_pending = pending = _get_pending_pkt_size(spwf_id);
+                    MBED_ASSERT(wind_pending > 0);
                 }
             }
         }

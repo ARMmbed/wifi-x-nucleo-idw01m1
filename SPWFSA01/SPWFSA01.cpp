@@ -116,6 +116,10 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
         if(read > 0) {
             if(_recv_ok()) {
                 ret = amount;
+
+                /* remove from pending sizes
+                 * (MUST be done before next async indications handling (e.g. `_winds_on()`)) */
+                _remove_pending_pkt_size(spwf_id, amount);
             } else {
                 debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
                 empty_rx_buffer();
@@ -136,6 +140,7 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
     return ret;
 }
 
+/* betzw - TODO: improve performance! */
 bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 {
     bool ret;
@@ -153,7 +158,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     trials = 0;
     while(_parser.getc() != '\x09') {
         if(trials++ > SPWFXX_MAX_TRIALS) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
             return false;
         }
     }
@@ -176,13 +181,13 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             val_getc = _parser.getc();
             ssid_buf[i] = (char)val_getc;
             if(val_getc < 0) {
-                debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-                goto recv_ap_get_out;
+                debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+                return false;
             } else if(val_getc == _cr_) { // '\r'
                 val_getc = _parser.getc();
                 if('\n' != (char)val_getc) {
-                    debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-                    goto recv_ap_get_out;
+                    debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+                    return false;
                 }
                 break;
             } else if(val_getc == _lf_) { // '\n'; betzw: WORK-AROUND module FW issues
@@ -194,13 +199,18 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         /* decide about position of `CAPS:` */
         rest = strstr(&ssid_buf[first_half], "CAPS:");
         if(rest == NULL) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-            goto recv_ap_get_out;
+            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            return false;
         }
 
         /* substitute <space> with '\0' */
-        MBED_ASSERT(rest > &ssid_buf[0]);
+        MBED_ASSERT(&rest[-1] >= &ssid_buf[0]);
         rest[-1] = '\0';
+
+        /* eventually substitute '\'' with '\0' */
+        if((&rest[-2] >= &ssid_buf[0]) && (rest[-2] == '\'')) {
+            rest[-2] = '\0';
+        }
 
         /* copy values */
         memcpy(&ap->ssid, ssid_buf, 32);
@@ -209,8 +219,8 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
         /* skip `CAPS: 0421 ` */
         if(strlen(rest) < 11) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
-            goto recv_ap_get_out;
+            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            return false;
         }
         rest += 11;
 
@@ -218,7 +228,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         value = *rest++;
         if(value != 'W') { // no security
             ap->security = NSAPI_SECURITY_NONE;
-            goto recv_ap_get_out;
+            return true;
         }
 
         /* determine security */
@@ -226,15 +236,15 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             char buffer[10];
 
             if(!(sscanf(rest, "%s%*[\x20]", (char*)&buffer) > 0)) { // '\0x20' == <space>
-                goto recv_ap_get_out;
+                return true;
             } else if(strncmp("EP", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WEP;
-                goto recv_ap_get_out;
+                return true;
             } else if(strncmp("PA2", buffer, 10) == 0) {
                 ap->security = NSAPI_SECURITY_WPA2;
-                goto recv_ap_get_out;
+                return true;
             } else if(strncmp("PA", buffer, 10) != 0) {
-                goto recv_ap_get_out;
+                return true;
             }
 
             /* got a "WPA", check for "WPA2" */
@@ -242,17 +252,16 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             value = *rest++;
             if(value == '\0') { // no further protocol
                 ap->security = NSAPI_SECURITY_WPA;
-                goto recv_ap_get_out;
+                return true;
             } else { // assume "WPA2"
                 ap->security = NSAPI_SECURITY_WPA_WPA2;
-                goto recv_ap_get_out;
+                return true;
             }
         }
     } else { // ret == false
-        debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+        debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
     }
 
-recv_ap_get_out:
     return ret;
 }
 

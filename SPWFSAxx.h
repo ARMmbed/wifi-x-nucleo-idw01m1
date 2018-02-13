@@ -75,6 +75,10 @@ public:
         return real_pkt_sizes[first_pkt_ptr];
     }
 
+    uint32_t cumulative(void) {
+        return cumulative_size;
+    }
+
     uint32_t remove(uint32_t size) {
         MBED_ASSERT(!empty());
 
@@ -343,8 +347,13 @@ private:
         return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
+    void _add_pending_packet_sz(int spwf_id, uint32_t size);
     void _add_pending_pkt_size(int spwf_id, uint32_t size) {
         _pending_pkt_sizes[spwf_id].add(size);
+    }
+
+    uint32_t _get_cumulative_size(int spwf_id) {
+        return _pending_pkt_sizes[spwf_id].cumulative();
     }
 
     uint32_t _remove_pending_pkt_size(int spwf_id, uint32_t size) {
