@@ -49,6 +49,9 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
     _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
     _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
     _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    _parser.oob("+WIND:24:WiFi Up::", callback(this, &SPWFSAxx::_skip_oob));
+#endif
 }
 
 bool SPWFSAxx::startup(int mode)
@@ -1003,6 +1006,20 @@ _get_out:
     /* force call of (external) callback */
     _call_callback();
 }
+
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+/*
+ * Handling oob (currently only for "+WIND:24:WiFi Up::")
+ */
+void SPWFSAxx::_skip_oob(void)
+{
+    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+        debug_if(true, "AT^ +WIND:24:WiFi Up::%s\r\n", _msg_buffer);
+    } else {
+        debug_if(true, "\r\nSPWF> Invalid string in SPWFSAxx::_skip_oob (%d)\r\n", __LINE__);
+    }
+}
+#endif
 
 void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 {

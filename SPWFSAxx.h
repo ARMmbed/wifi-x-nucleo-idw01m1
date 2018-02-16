@@ -315,6 +315,9 @@ private:
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
     void _server_gone_handler(void);
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    void _skip_oob(void);
+#endif
     bool _wait_wifi_hw_started(void);
     bool _wait_console_active(void);
     int _read_len(int);
