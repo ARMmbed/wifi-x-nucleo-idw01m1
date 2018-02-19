@@ -505,7 +505,7 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
             sent < amount;
             to_send = ((amount - sent) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - sent)) {
         {
-            BH_HANDLER;
+            BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
             if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                     && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
@@ -1037,7 +1037,7 @@ void SPWFSAxx::attach(Callback<void()> func)
  */
 int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 {
-    BH_HANDLER;
+    BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
     while (true) {
         /* check if any packets are ready for us */

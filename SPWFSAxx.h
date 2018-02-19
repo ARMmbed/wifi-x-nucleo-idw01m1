@@ -446,9 +446,7 @@ private:
 private:
     friend class SPWFSA01;
     friend class SPWFSA04;
+    friend class SpwfSAInterface;
 };
-
-#define BH_HANDLER \
-        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves))
 
 #endif // SPWFSAXX_H

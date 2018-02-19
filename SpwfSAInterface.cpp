@@ -39,19 +39,18 @@
 
 #if MBED_CONF_RTOS_PRESENT
 static Mutex _spwf_mutex; // assuming a recursive mutex
-static void _spwf_lock() { (void)(_spwf_mutex.lock()); }
-static void _spwf_unlock() { (void)(_spwf_mutex.unlock()); }
-
-/* Make compiler happy */
-static inline void _dummy(void) {
-    /* betzw: make compiler happy */
-    void *_dummy_var = (void*)&_spwf_lock;
-    _dummy_var = (void*)&_spwf_unlock;
-    (void)_dummy_var;
+static void _spwf_lock() {
+    (void)(_spwf_mutex.lock());
 }
+static Callback<void()> _callback_spwf_lock(&_spwf_lock);
+
+static void _spwf_unlock() {
+    (void)(_spwf_mutex.unlock());
+}
+static Callback<void()> _callback_spwf_unlock(&_spwf_unlock);
 
 #define SYNC_HANDLER \
-        BlockExecuter sync_handler(Callback<void()>(&_spwf_unlock), Callback<void()>(&_spwf_lock))
+        BlockExecuter sync_handler(_callback_spwf_unlock, _callback_spwf_lock)
 #else
 #define SYNC_HANDLER
 #endif
@@ -289,7 +288,9 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 
     MBED_ASSERT(((unsigned int)socket->internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
 
-    if(_socket_has_connected(socket->internal_id)) return NSAPI_ERROR_IS_CONNECTED;
+    if(_socket_has_connected(socket->internal_id)) {
+        return NSAPI_ERROR_IS_CONNECTED;
+    }
 
     _spwf.setTimeout(SPWF_OPEN_TIMEOUT);
 
@@ -299,16 +300,28 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
         return NSAPI_ERROR_UNSUPPORTED;
     }
 
-    if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
+    /* block asynchronous indications */
+    if(!_spwf._winds_off()) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    /* check for the module to report a valid id */
-    MBED_ASSERT(((unsigned int)socket->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
+    {
+        BlockExecuter bh_handler(Callback<void()>(&_spwf, &SPWFSAxx::_execute_bottom_halves));
+        {
+            BlockExecuter winds_enabler(Callback<void()>(&_spwf, &SPWFSAxx::_winds_on));
 
-    _internal_ids[socket->spwf_id] = socket->internal_id;
-    socket->addr = addr;
-    return NSAPI_ERROR_OK;
+            if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
+                return NSAPI_ERROR_DEVICE_ERROR;
+            }
+
+            /* check for the module to report a valid id */
+            MBED_ASSERT(((unsigned int)socket->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
+
+            _internal_ids[socket->spwf_id] = socket->internal_id;
+            socket->addr = addr;
+            return NSAPI_ERROR_OK;
+        }
+    }
 }
 
 nsapi_error_t SpwfSAInterface::socket_bind(void *handle, const SocketAddress &address)
@@ -559,7 +572,16 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
     }
 
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
+
+    /* block asynchronous indications */
+    if(!_spwf._winds_off()) {
+        return NSAPI_ERROR_DEVICE_ERROR;
+    }
+
     ret = _spwf.scan(res, count);
+
+    /* unblock asynchronous indications */
+    _spwf._winds_on();
 
     //de-initialize the device after scanning
     if(!_isInitialized)

@@ -32,7 +32,6 @@ bool SPWFSA04::open(const char *type, int* spwf_id, const char* addr, int port)
     int socket_id;
     int value;
     int trials;
-    BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,NULL,%s", addr, port, type))
     {

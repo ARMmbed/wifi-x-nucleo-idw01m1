@@ -32,7 +32,6 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     int socket_id;
     int value;
     int trials;
-    BH_HANDLER;
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
@@ -88,7 +87,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             }
             break;
         default:
-            debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+            debug_if(true, "\r\nSPWF> error opening socket (value=%d, %d)\r\n", value, __LINE__);
             break;
     }
 
