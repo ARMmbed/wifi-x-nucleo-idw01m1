@@ -24,7 +24,7 @@
 /* Common SPWFSAxx macros */
 #define SPWFXX_WINDS_LOW_ON         "0x00000000"
 #define SPWFXX_DEFAULT_BAUD_RATE    115200
-#define SPWFXX_MAX_TRIALS           100
+#define SPWFXX_MAX_TRIALS           3
 
 #if !defined(SPWFSAXX_RTS_PIN)
 #define SPWFSAXX_RTS_PIN    NC
@@ -42,13 +42,16 @@
 /* Max number of sockets & packets */
 #define SPWFSA_SOCKET_COUNT         (8)
 #define SPWFSA_MAX_PACKETS          (4)
-#define SPWFSA_SEND_PKTSIZE         (730)
 
 #define PENDING_DATA_SLOTS          (13)
 
 /* Pending data packets size buffer */
 class SpwfRealPendingPackets {
 public:
+    SpwfRealPendingPackets() {
+        reset();
+    }
+
     void add(uint32_t new_cum_size) {
         MBED_ASSERT(new_cum_size >= cumulative_size);
 
@@ -72,6 +75,10 @@ public:
         return real_pkt_sizes[first_pkt_ptr];
     }
 
+    uint32_t cumulative(void) {
+        return cumulative_size;
+    }
+
     uint32_t remove(uint32_t size) {
         MBED_ASSERT(!empty());
 
@@ -91,7 +98,11 @@ public:
 
 private:
     bool empty(void) {
-        return (first_pkt_ptr == last_pkt_ptr);
+        if(first_pkt_ptr == last_pkt_ptr) {
+            MBED_ASSERT(cumulative_size == 0);
+            return true;
+        }
+        return false;
     }
 
     uint16_t real_pkt_sizes[PENDING_DATA_SLOTS];
@@ -142,7 +153,7 @@ public:
     /**
      * Get the IP address of SPWFSAxx
      *
-     * @return null-teriminated IP address or null if no IP address is assigned
+     * @return null-terminated IP address or null if no IP address is assigned
      */
     const char *getIPAddress(void);
 
@@ -156,14 +167,14 @@ public:
     /** Get the local gateway
      *
      *  @return         Null-terminated representation of the local gateway
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     const char *getGateway(void);
 
     /** Get the local network mask
      *
      *  @return         Null-terminated representation of the local network mask
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     const char *getNetmask(void);
 
@@ -304,6 +315,9 @@ private:
     void _hard_fault_handler(void);
     void _wifi_hwfault_handler(void);
     void _server_gone_handler(void);
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    void _skip_oob(void);
+#endif
     bool _wait_wifi_hw_started(void);
     bool _wait_console_active(void);
     int _read_len(int);
@@ -316,6 +330,7 @@ private:
     void _recover_from_hard_faults(void);
     void _free_packets(int spwf_id);
     void _free_all_packets(void);
+    void _process_winds();
 
     virtual int _read_in(char*, int, uint32_t) = 0;
 
@@ -335,8 +350,13 @@ private:
         return _parser.recv(SPWFXX_RECV_OK) && _recv_delim_lf();
     }
 
+    void _add_pending_packet_sz(int spwf_id, uint32_t size);
     void _add_pending_pkt_size(int spwf_id, uint32_t size) {
         _pending_pkt_sizes[spwf_id].add(size);
+    }
+
+    uint32_t _get_cumulative_size(int spwf_id) {
+        return _pending_pkt_sizes[spwf_id].cumulative();
     }
 
     uint32_t _remove_pending_pkt_size(int spwf_id, uint32_t size) {
@@ -426,9 +446,7 @@ private:
 private:
     friend class SPWFSA01;
     friend class SPWFSA04;
+    friend class SpwfSAInterface;
 };
-
-#define BH_HANDLER \
-        BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves))
 
 #endif // SPWFSAXX_H

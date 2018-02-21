@@ -49,6 +49,9 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
     _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
     _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
     _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+    _parser.oob("+WIND:24:WiFi Up::", callback(this, &SPWFSAxx::_skip_oob));
+#endif
 }
 
 bool SPWFSAxx::startup(int mode)
@@ -497,11 +500,12 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
     uint32_t sent = 0U, to_send;
     bool ret = true;
 
-    for(to_send = (amount > SPWFSA_SEND_PKTSIZE) ? SPWFSA_SEND_PKTSIZE : amount;
+    /* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
+    for(to_send = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
             sent < amount;
-            to_send = ((amount - sent) > SPWFSA_SEND_PKTSIZE) ? SPWFSA_SEND_PKTSIZE : (amount - sent)) {
+            to_send = ((amount - sent) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (amount - sent)) {
         {
-            BH_HANDLER;
+            BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
             if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                     && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
@@ -541,10 +545,13 @@ int SPWFSAxx::_read_len(int spwf_id) {
 
 void SPWFSAxx::_winds_on(void) {
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
 }
 
@@ -552,18 +559,21 @@ void SPWFSAxx::_winds_on(void) {
 bool SPWFSAxx::_winds_off(void) {
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
         _winds_on();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
         _winds_on();
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
         _winds_on();
         return false;
     }
@@ -637,9 +647,6 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
         *_packets_end = packet;
         _packets_end = &packet->next;
 
-        /* remove from pending sizes */
-        _remove_pending_pkt_size(spwf_id, amount);
-
         /* force call of (external) callback */
         _call_callback();
     }
@@ -669,7 +676,6 @@ void SPWFSAxx::_free_all_packets() {
     }
 }
 
-#define CLOSE_MAX_RETRY (3)
 bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
@@ -678,7 +684,7 @@ bool SPWFSAxx::close(int spwf_id)
         goto close_bh_handling; // `ret == false`
     }
 
-    for(int retry_cnt = 0; retry_cnt < CLOSE_MAX_RETRY; retry_cnt++) {
+    for(int retry_cnt = 0; retry_cnt < SPWFXX_MAX_TRIALS; retry_cnt++) {
         // Flush out pending data
         while(true) {
             int amount = _read_in_pkt(spwf_id, true);
@@ -799,6 +805,30 @@ void SPWFSAxx::_network_lost_handler_th(void)
     return;
 }
 
+/* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
+void SPWFSAxx::_add_pending_packet_sz(int spwf_id, uint32_t size) {
+    uint32_t to_add;
+    uint32_t added = _get_cumulative_size(spwf_id);
+
+    if(size <= added) { // might happen due to delayed WIND delivery
+        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        return;
+    }
+
+    for(to_add = ((size - added) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (size - added);
+            added < size;
+            to_add = ((size - added) > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : (size - added)) {
+        _add_pending_pkt_size(spwf_id, added + to_add);
+        added += to_add;
+    }
+
+    /* force call of (external) callback */
+    _call_callback();
+
+    /* set that data is pending */
+    _set_pending_data(spwf_id);
+}
+
 /*
  * Handling oob ("+WIND:55:Pending Data")
  */
@@ -826,11 +856,10 @@ void SPWFSAxx::_packet_handler_th(void)
      */
     internal_id = _associated_interface.get_internal_id(spwf_id);
     if(internal_id != SPWFSA_SOCKET_COUNT) {
-        _add_pending_pkt_size(spwf_id, amount);
-        _set_pending_data(spwf_id);
+        debug_if(_dbg_on, "AT^ +WIND:55:Pending Data:%d:%d - #2\r\n", spwf_id, amount);
+        _add_pending_packet_sz(spwf_id, amount);
 
-        /* force call of (external) callback */
-        _call_callback();
+        MBED_ASSERT(_get_pending_pkt_size(spwf_id) != 0);
     } else {
         debug_if(_dbg_on, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
     }
@@ -978,6 +1007,20 @@ _get_out:
     _call_callback();
 }
 
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
+/*
+ * Handling oob (currently only for "+WIND:24:WiFi Up::")
+ */
+void SPWFSAxx::_skip_oob(void)
+{
+    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+        debug_if(_dbg_on, "AT^ +WIND:24:WiFi Up::%s\r\n", _msg_buffer);
+    } else {
+        debug_if(_dbg_on, "\r\nSPWF> Invalid string in SPWFSAxx::_skip_oob (%d)\r\n", __LINE__);
+    }
+}
+#endif
+
 void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 {
     _timeout = timeout_ms;
@@ -994,7 +1037,7 @@ void SPWFSAxx::attach(Callback<void()> func)
  */
 int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 {
-    BH_HANDLER;
+    BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
     while (true) {
         /* check if any packets are ready for us */
@@ -1058,6 +1101,32 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
     }
 }
 
+void SPWFSAxx::_process_winds(void) {
+    do {
+        if(readable()) {
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+            if(_recv_delim_cr_lf()) // betzw: only necessary for `IDW01M1`
+#endif
+            {
+                if(_parser.process_oob()) {
+                    /* something to do? */;
+                } else {
+                    debug_if(_dbg_on, "%s():\t\tNo oob's found!\r\n", __func__);
+                    return; // no oob's found
+                }
+            }
+#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
+            else {
+                debug_if(_dbg_on, "%s():\t\tNo delimiters found!\r\n", __func__);
+                return; // no leading delimiters
+            }
+#endif
+        } else {
+            return; // no more data in buffer
+        }
+    } while(true);
+}
+
 /* Note: returns
  * '>=0'             in case of success, amount of read in data (in bytes)
  * 'SPWFXX_ERR_OOM'  in case of "out of memory"
@@ -1067,26 +1136,41 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     int pending;
     uint32_t wind_pending;
-
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
                                  Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
 
-    pending = _read_len(spwf_id); // triggers also async indication handling!
+    _process_winds(); // perform async indication handling
+
     if(close) { // read in all data
-        wind_pending = pending;
+        wind_pending = pending = _read_len(spwf_id); // triggers also async indication handling!
 
         /* reset pending data sizes */
         _reset_pending_pkt_sizes(spwf_id);
-        /* set new entry for entry size */
+        /* set new entry for pending size */
         _add_pending_pkt_size(spwf_id, (uint32_t)pending);
     } else { // only read in already notified data
-        wind_pending = _get_pending_pkt_size(spwf_id);
+        pending = wind_pending = _get_pending_pkt_size(spwf_id);
+        if(pending == 0) { // special handling for no packets pending (to WORK AROUND missing WINDs)!
+            pending = _read_len(spwf_id); // triggers also async indication handling!
+
+            if(pending != 0) {
+                _process_winds(); // perform async indication handling (again)
+                wind_pending = _get_pending_pkt_size(spwf_id);
+
+                if(wind_pending == 0) {
+                    /* betzw - WORK AROUND module FW issues: set new entry for pending size */
+                    debug_if(_dbg_on, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
+                    _add_pending_packet_sz(spwf_id, (uint32_t)pending);
+
+                    wind_pending = pending = _get_pending_pkt_size(spwf_id);
+                    MBED_ASSERT(wind_pending > 0);
+                }
+            }
+        }
     }
 
     if((pending > 0) && (wind_pending > 0)) {
-        MBED_ASSERT(pending >= (int)wind_pending);
-
-        if(pending == (int)wind_pending) {
+        if(pending <= (int)wind_pending) {
             _clear_pending_data(spwf_id);
         }
 
@@ -1096,6 +1180,8 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             /* we do not know if data is still pending at this point
                but leaving the pending data bit set might lead to an endless loop */
             _clear_pending_data(spwf_id);
+            /* also reset pending data sizes */
+            _reset_pending_pkt_sizes(spwf_id);
 
             return ret;
         }
@@ -1104,17 +1190,16 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
         /* we do not know if data is still pending at this point
            but leaving the pending data bit set might lead to an endless loop */
         _clear_pending_data(spwf_id);
+        /* also reset pending data sizes */
+        _reset_pending_pkt_sizes(spwf_id);
 
         return pending;
     } else if(pending == 0) {
         MBED_ASSERT(wind_pending == 0);
         _clear_pending_data(spwf_id);
     } else if(wind_pending == 0) { // `pending > 0`
-        MBED_ASSERT(pending > 0);
-        debug_if(_dbg_on, "%s():\t\t%d:%d (WIND missing)\r\n", __func__, spwf_id, pending);
-
-        /* avoid potential endless loop & wait for WIND */
-        _clear_pending_data(spwf_id);
+        /* betzw: should never happen! */
+        MBED_ASSERT(false);
     }
 
     return (int)wind_pending;

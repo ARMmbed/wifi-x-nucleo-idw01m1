@@ -28,6 +28,8 @@
 
 #endif // !defined(TARGET_FF_ARDUINO)
 
+#define SPWFXX_SEND_RECV_PKTSIZE    (730)
+
 #define SPWFXX_OOB_ERROR            "AT-S.ERROR:"                                           // "ERROR:"
 
 #define SPWFXX_RECV_OK              "AT-S.OK\n"                                             // "OK\n"

@@ -145,14 +145,14 @@ public:
     /** Get the local gateway
      *
      *  @return         Null-terminated representation of the local gateway
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     virtual const char *get_gateway();
 
     /** Get the local network mask
      *
      *  @return         Null-terminated representation of the local network mask
-     *                  or null if no network mask has been recieved
+     *                  or null if no network mask has been received
      */
     virtual const char *get_netmask();
 
@@ -224,7 +224,7 @@ private:
      */
     virtual nsapi_error_t socket_bind(void *handle, const SocketAddress &address);
 
-    /** Start listening for incoming connectionst - NOT SUPPORTED
+    /** Start listening for incoming connections - NOT SUPPORTED
      *
      *  This function is not supported and will return NSAPI_ERROR_UNSUPPORTED
      *

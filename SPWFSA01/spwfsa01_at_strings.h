@@ -21,6 +21,8 @@
 
 #endif // !defined(TARGET_FF_MORPHO)
 
+#define SPWFXX_SEND_RECV_PKTSIZE    (730)
+
 #define SPWFXX_OOB_ERROR            "ERROR:"                                            // "AT-S.ERROR:"
 
 #define SPWFXX_RECV_OK              "OK\n"                                              // "AT-S.OK\n"
