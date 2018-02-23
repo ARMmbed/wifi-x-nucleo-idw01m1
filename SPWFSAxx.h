@@ -297,7 +297,7 @@ private:
         while(readable()) _parser.getc();
     }
 
-    /* block calling (external) callback */
+    /* block calling (external) callback in IRQ context */
     volatile unsigned int _call_event_callback_blocked;
     Callback<void()> _callback_func;
 
@@ -393,7 +393,7 @@ private:
         _read_in_pending();
     }
 
-    /* call (external) callback only while not receiving */
+    /* Do not call the (external) callback in IRQ context while performing critical module operations */
     void _event_handler(void);
 
     void _error_handler(void);
