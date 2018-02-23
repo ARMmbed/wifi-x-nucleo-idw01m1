@@ -555,27 +555,35 @@ void SPWFSAxx::_winds_on(void) {
     }
 }
 
+/* Define beyond macro in case you want to report back failures in switching off WINDs to the caller */
+// #define SPWFXX_SOWF
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     return true;
