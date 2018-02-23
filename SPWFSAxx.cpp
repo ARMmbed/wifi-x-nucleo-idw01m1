@@ -32,7 +32,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
-  _call_event_callback_blocked(false),
+  _call_event_callback_blocked(0),
   _callback_func(),
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
