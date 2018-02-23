@@ -32,7 +32,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
-  _call_event_callback_blocked(false),
+  _call_event_callback_blocked(0),
   _callback_func(),
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
@@ -547,7 +547,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
 #define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
 void SPWFSAxx::_winds_on(void) {
-    MBED_ASSERT(_call_event_callback_blocked);
+    MBED_ASSERT(_is_event_callback_blocked());
 
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
         debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
@@ -564,7 +564,7 @@ void SPWFSAxx::_winds_on(void) {
 // #define SPWFXX_SOWF
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
-    MBED_ASSERT(_call_event_callback_blocked);
+    MBED_ASSERT(_is_event_callback_blocked());
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
@@ -922,6 +922,8 @@ void SPWFSAxx::_network_lost_handler_bh(void)
     nlh_get_out:
         debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
         _parser.set_timeout(_timeout);
+
+        MBED_ASSERT(_call_event_callback_blocked == 1);
 
         return;
     }
