@@ -32,7 +32,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
-  _call_event_callback_blocked(false),
+  _call_event_callback_blocked(0),
   _callback_func(),
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
@@ -544,6 +544,9 @@ int SPWFSAxx::_read_len(int spwf_id) {
 #define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
 void SPWFSAxx::_winds_on(void) {
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
         debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
@@ -555,27 +558,38 @@ void SPWFSAxx::_winds_on(void) {
     }
 }
 
+/* Define beyond macro in case you want to report back failures in switching off WINDs to the caller */
+// #define SPWFXX_SOWF
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
         debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+#ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
+#endif
     }
 
     return true;
@@ -752,7 +766,7 @@ close_bh_handling:
  * Buffered serial event handler
  *
  * Note: executed in IRQ context!
- * Note: call (external) callback only while not receiving
+ * Note: do not call (external) callback in IRQ context while performing critical module operations
  */
 void SPWFSAxx::_event_handler(void)
 {
@@ -873,7 +887,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
     {
         bool were_connected;
         BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_and_callback),
-                                     Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
+                                     Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context as long as network is lost */
         Timer timer;
         timer.start();
 
@@ -1029,7 +1043,7 @@ void SPWFSAxx::setTimeout(uint32_t timeout_ms)
 
 void SPWFSAxx::attach(Callback<void()> func)
 {
-    _callback_func = func; /* call (external) callback only while not receiving */
+    _callback_func = func; /* do not call (external) callback in IRQ context during critical module operations */
 }
 
 /**
@@ -1137,7 +1151,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     int pending;
     uint32_t wind_pending;
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* call (external) callback only while not receiving */
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context while receiving */
 
     _process_winds(); // perform async indication handling
 
