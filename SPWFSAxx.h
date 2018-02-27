@@ -297,8 +297,8 @@ private:
         while(readable()) _parser.getc();
     }
 
-    /* block calling (external) callback in IRQ context */
-    volatile unsigned int _call_event_callback_blocked;
+    /* call (external) callback only while not receiving */
+    volatile bool _call_event_callback_blocked;
     Callback<void()> _callback_func;
 
     struct packet {
@@ -405,31 +405,30 @@ private:
     }
 
     bool _is_event_callback_blocked(void) {
-        return (_call_event_callback_blocked != 0);
+        return _call_event_callback_blocked;
     }
 
     void _block_event_callback(void) {
-        _call_event_callback_blocked++;
+        MBED_ASSERT(!_call_event_callback_blocked);
+        _call_event_callback_blocked = true;
     }
 
     void _unblock_event_callback(void) {
-        MBED_ASSERT(_call_event_callback_blocked > 0);
-        _call_event_callback_blocked--;
-        if(_call_event_callback_blocked == 0) {
-            _trigger_event_callback();
-        }
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
+        _trigger_event_callback();
     }
 
     /* unblock & force call of (external) callback */
     void _unblock_and_callback(void) {
-        MBED_ASSERT(_call_event_callback_blocked == 1);
-        _call_event_callback_blocked = 0;
+        MBED_ASSERT(_call_event_callback_blocked);
+        _call_event_callback_blocked = false;
         _call_callback();
     }
 
     /* trigger call of (external) callback in case there is still data */
     void _trigger_event_callback(void) {
-        MBED_ASSERT(_call_event_callback_blocked == 0);
+        MBED_ASSERT(!_call_event_callback_blocked);
         /* if still data available */
         if(readable()) {
             _call_callback();
