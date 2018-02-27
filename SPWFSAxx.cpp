@@ -56,6 +56,9 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 
 bool SPWFSAxx::startup(int mode)
 {
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context while receiving */
+
     /*Reset module*/
     if(!hw_reset()) {
         debug_if(true, "\r\nSPWF> HW reset failed\r\n");
@@ -544,8 +547,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
 #define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
 void SPWFSAxx::_winds_on(void) {
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+    MBED_ASSERT(_call_event_callback_blocked > 0);
 
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
         debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
@@ -562,8 +564,7 @@ void SPWFSAxx::_winds_on(void) {
 // #define SPWFXX_SOWF
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+    MBED_ASSERT(_call_event_callback_blocked > 0);
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {

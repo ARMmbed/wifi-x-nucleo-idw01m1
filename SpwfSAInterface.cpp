@@ -300,26 +300,31 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
         return NSAPI_ERROR_UNSUPPORTED;
     }
 
-    /* block asynchronous indications */
-    if(!_spwf._winds_off()) {
-        return NSAPI_ERROR_DEVICE_ERROR;
-    }
-
     {
-        BlockExecuter bh_handler(Callback<void()>(&_spwf, &SPWFSAxx::_execute_bottom_halves));
+        BlockExecuter netsock_wa_obj(Callback<void()>(&_spwf, &SPWFSAxx::_unblock_event_callback),
+                                     Callback<void()>(&_spwf, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
+        /* block asynchronous indications */
+        if(!_spwf._winds_off()) {
+            return NSAPI_ERROR_DEVICE_ERROR;
+        }
+
         {
-            BlockExecuter winds_enabler(Callback<void()>(&_spwf, &SPWFSAxx::_winds_on));
+            BlockExecuter bh_handler(Callback<void()>(&_spwf, &SPWFSAxx::_execute_bottom_halves));
+            {
+                BlockExecuter winds_enabler(Callback<void()>(&_spwf, &SPWFSAxx::_winds_on));
 
-            if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
-                return NSAPI_ERROR_DEVICE_ERROR;
+                if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
+                    return NSAPI_ERROR_DEVICE_ERROR;
+                }
+
+                /* check for the module to report a valid id */
+                MBED_ASSERT(((unsigned int)socket->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
+
+                _internal_ids[socket->spwf_id] = socket->internal_id;
+                socket->addr = addr;
+                return NSAPI_ERROR_OK;
             }
-
-            /* check for the module to report a valid id */
-            MBED_ASSERT(((unsigned int)socket->spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
-
-            _internal_ids[socket->spwf_id] = socket->internal_id;
-            socket->addr = addr;
-            return NSAPI_ERROR_OK;
         }
     }
 }
@@ -573,15 +578,21 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
 
     _spwf.setTimeout(SPWF_SCAN_TIMEOUT);
 
-    /* block asynchronous indications */
-    if(!_spwf._winds_off()) {
-        return NSAPI_ERROR_DEVICE_ERROR;
+    {
+        BlockExecuter netsock_wa_obj(Callback<void()>(&_spwf, &SPWFSAxx::_unblock_event_callback),
+                                     Callback<void()>(&_spwf, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
+        /* block asynchronous indications */
+        if(!_spwf._winds_off()) {
+            return NSAPI_ERROR_DEVICE_ERROR;
+        }
+
+        ret = _spwf.scan(res, count);
+
+        /* unblock asynchronous indications */
+        _spwf._winds_on();
+
     }
-
-    ret = _spwf.scan(res, count);
-
-    /* unblock asynchronous indications */
-    _spwf._winds_on();
 
     //de-initialize the device after scanning
     if(!_isInitialized)
