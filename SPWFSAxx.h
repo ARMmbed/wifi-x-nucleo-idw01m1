@@ -297,7 +297,7 @@ private:
         while(readable()) _parser.getc();
     }
 
-    /* call (external) callback only while not receiving */
+    /* Disable calling (external) callback in IRQ context */
     volatile bool _call_event_callback_blocked;
     Callback<void()> _callback_func;
 

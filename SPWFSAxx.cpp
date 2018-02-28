@@ -57,7 +57,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 bool SPWFSAxx::startup(int mode)
 {
     BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context while receiving */
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
 
     /*Reset module*/
     if(!hw_reset()) {
