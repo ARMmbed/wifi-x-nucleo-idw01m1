@@ -32,7 +32,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _pending_sockets_bitmap(0),
   _network_lost_flag(false),
   _associated_interface(ifce),
-  _call_event_callback_blocked(0),
+  _call_event_callback_blocked(false),
   _callback_func(),
   _packets(0), _packets_end(&_packets),
   _msg_buffer(ssid_buf)
@@ -56,6 +56,9 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 
 bool SPWFSAxx::startup(int mode)
 {
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context while receiving */
+
     /*Reset module*/
     if(!hw_reset()) {
         debug_if(_dbg_on, "\r\nSPWF> HW reset failed\r\n");
@@ -544,8 +547,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
 #define SPWFXX_WINDS_OFF "0xFFFFFFFF"
 
 void SPWFSAxx::_winds_on(void) {
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+    MBED_ASSERT(_call_event_callback_blocked);
 
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
         debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
@@ -562,8 +564,7 @@ void SPWFSAxx::_winds_on(void) {
 // #define SPWFXX_SOWF
 /* Note: in case of error blocking has been (tried to be) lifted */
 bool SPWFSAxx::_winds_off(void) {
-    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
-                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+    MBED_ASSERT(_call_event_callback_blocked);
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
@@ -636,9 +637,9 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
-        error("%s(%d): Out of memory!", __func__, __LINE__);
+        error("%s(%d): Out of memory!\r\n", __func__, __LINE__);
 #else // NDEBUG
-        debug("%s(%d): Out of memory!", __func__, __LINE__);
+        debug("%s(%d): Out of memory!\r\n", __func__, __LINE__);
 #endif
         debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_OOM; /* out of memory: give up here! */
