@@ -524,11 +524,11 @@ nsapi_error_t SpwfSAInterface::set_credentials(const char *ssid, const char *pas
 {
     SYNC_HANDLER;
 
-    if(ssid == NULL) {
+    if((ssid == NULL) || (strlen(ssid) == 0)) {
         return NSAPI_ERROR_PARAMETER;
     }
 
-    if(pass != NULL) {
+    if((pass != NULL) && (strlen(pass) > 0)) {
         if(strlen(pass) < sizeof(ap_pass)) {
             if(security == NSAPI_SECURITY_NONE) {
                 return NSAPI_ERROR_PARAMETER;
