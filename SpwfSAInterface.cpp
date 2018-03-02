@@ -315,6 +315,8 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
                 BlockExecuter winds_enabler(Callback<void()>(&_spwf, &SPWFSAxx::_winds_on));
 
                 if(!_spwf.open(proto, &socket->spwf_id, addr.get_ip_address(), addr.get_port())) {
+                    MBED_ASSERT(_spwf._call_event_callback_blocked == 1);
+
                     return NSAPI_ERROR_DEVICE_ERROR;
                 }
 
@@ -323,6 +325,9 @@ nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress 
 
                 _internal_ids[socket->spwf_id] = socket->internal_id;
                 socket->addr = addr;
+
+                MBED_ASSERT(_spwf._call_event_callback_blocked == 1);
+
                 return NSAPI_ERROR_OK;
             }
         }
@@ -421,6 +426,7 @@ nsapi_size_or_error_t SpwfSAInterface::_socket_recv(void *handle, void *data, un
 
     int32_t recv = _spwf.recv(socket->spwf_id, (char*)data, (uint32_t)size, datagram);
 
+    MBED_ASSERT(!_spwf._is_event_callback_blocked());
     MBED_ASSERT((recv != 0) || (size == 0));
 
     if (recv < 0) {
@@ -584,6 +590,8 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
 
         /* block asynchronous indications */
         if(!_spwf._winds_off()) {
+            MBED_ASSERT(_spwf._call_event_callback_blocked == 1);
+
             return NSAPI_ERROR_DEVICE_ERROR;
         }
 
@@ -591,8 +599,9 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
 
         /* unblock asynchronous indications */
         _spwf._winds_on();
-
     }
+
+    MBED_ASSERT(!_spwf._is_event_callback_blocked());
 
     //de-initialize the device after scanning
     if(!_isInitialized)
