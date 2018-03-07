@@ -1167,7 +1167,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
         if(pending > 0) {
             /* reset pending data sizes */
             _reset_pending_pkt_sizes(spwf_id);
-            /* set new entry for pending size */
+            /* create new entry for pending size */
             _add_pending_packet_sz(spwf_id, (uint32_t)pending);
 
             pending = wind_pending = _get_pending_pkt_size(spwf_id);
@@ -1185,7 +1185,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
                 wind_pending = _get_pending_pkt_size(spwf_id);
 
                 if(wind_pending == 0) {
-                    /* betzw - WORK AROUND module FW issues: set new entry for pending size */
+                    /* betzw - WORK AROUND module FW issues: create new entry for pending size */
                     debug_if(_dbg_on, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
                     _add_pending_packet_sz(spwf_id, (uint32_t)pending);
 
@@ -1199,8 +1199,6 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     }
 
     if((pending > 0) && (wind_pending > 0)) {
-        MBED_ASSERT(pending >= (int)wind_pending);
-
         int ret = _read_in_packet(spwf_id, wind_pending);
         if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
             /* we do not know if data is still pending at this point
@@ -1212,7 +1210,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             return ret;
         }
 
-        if(_get_cumulative_size(spwf_id) == 0) {
+        if((_get_cumulative_size(spwf_id) == 0) && (pending <= (int)wind_pending)) {
             _clear_pending_data(spwf_id);
         }
     } else if(pending < 0) { /* 'SPWFXX_ERR_LEN' error */
