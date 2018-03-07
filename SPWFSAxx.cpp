@@ -710,7 +710,7 @@ bool SPWFSAxx::close(int spwf_id)
             }
             if(amount == 0) break; // no more data to be read
 
-            /* immediately free packet (to avoid "out of memory") */
+            /* immediately free packet(s) (to avoid "out of memory") */
             _free_packets(spwf_id);
 
             /* interleave bottom halves */
@@ -726,6 +726,9 @@ bool SPWFSAxx::close(int spwf_id)
             debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
             /* interleave bottom halves */
             _execute_bottom_halves();
+
+            /* free packets */
+            _free_packets(spwf_id);
         }
     }
 
@@ -1161,16 +1164,23 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     if(close) { // read in all data
         wind_pending = pending = _read_len(spwf_id); // triggers also async indication handling!
 
-        /* reset pending data sizes */
-        _reset_pending_pkt_sizes(spwf_id);
-        /* set new entry for pending size */
-        _add_pending_pkt_size(spwf_id, (uint32_t)pending);
+        if(pending > 0) {
+            /* reset pending data sizes */
+            _reset_pending_pkt_sizes(spwf_id);
+            /* set new entry for pending size */
+            _add_pending_packet_sz(spwf_id, (uint32_t)pending);
+
+            pending = wind_pending = _get_pending_pkt_size(spwf_id);
+            MBED_ASSERT(wind_pending > 0);
+        } else if(pending < 0) {
+            debug_if(_dbg_on, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
+        }
     } else { // only read in already notified data
         pending = wind_pending = _get_pending_pkt_size(spwf_id);
         if(pending == 0) { // special handling for no packets pending (to WORK AROUND missing WINDs)!
             pending = _read_len(spwf_id); // triggers also async indication handling!
 
-            if(pending != 0) {
+            if(pending > 0) {
                 _process_winds(); // perform async indication handling (again)
                 wind_pending = _get_pending_pkt_size(spwf_id);
 
@@ -1179,20 +1189,19 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
                     debug_if(_dbg_on, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
                     _add_pending_packet_sz(spwf_id, (uint32_t)pending);
 
-                    wind_pending = pending = _get_pending_pkt_size(spwf_id);
+                    pending = wind_pending = _get_pending_pkt_size(spwf_id);
                     MBED_ASSERT(wind_pending > 0);
                 }
+            } else if(pending < 0) {
+                debug_if(_dbg_on, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
             }
         }
     }
 
     if((pending > 0) && (wind_pending > 0)) {
-        if(pending <= (int)wind_pending) {
-            _clear_pending_data(spwf_id);
-        }
+        MBED_ASSERT(pending >= (int)wind_pending);
 
         int ret = _read_in_packet(spwf_id, wind_pending);
-        MBED_ASSERT(ret != 0);
         if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
             /* we do not know if data is still pending at this point
                but leaving the pending data bit set might lead to an endless loop */
@@ -1201,6 +1210,10 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             _reset_pending_pkt_sizes(spwf_id);
 
             return ret;
+        }
+
+        if(_get_cumulative_size(spwf_id) == 0) {
+            _clear_pending_data(spwf_id);
         }
     } else if(pending < 0) { /* 'SPWFXX_ERR_LEN' error */
         MBED_ASSERT(pending == SPWFXX_ERR_LEN);
