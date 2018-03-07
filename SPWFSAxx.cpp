@@ -1199,7 +1199,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
     }
 
     if((pending > 0) && (wind_pending > 0)) {
-        MBED_ASSERT((uint32_t)pending >= wind_pending);
+        MBED_ASSERT(pending >= (int)wind_pending);
 
         int ret = _read_in_packet(spwf_id, wind_pending);
         if(ret < 0) { /* "out of memory" or `_read_in_packet()` error */
@@ -1212,7 +1212,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             return ret;
         }
 
-        if(pending == (int)wind_pending) {
+        if(_get_cumulative_size(spwf_id) == 0) {
             _clear_pending_data(spwf_id);
         }
     } else if(pending < 0) { /* 'SPWFXX_ERR_LEN' error */
