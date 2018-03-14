@@ -890,7 +890,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
     {
         bool were_connected;
-        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_and_callback),
+        BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
                                      Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* do not call (external) callback in IRQ context as long as network is lost */
         Timer timer;
         timer.start();
@@ -926,7 +926,8 @@ void SPWFSAxx::_network_lost_handler_bh(void)
         debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
         _parser.set_timeout(_timeout);
 
-        MBED_ASSERT(_call_event_callback_blocked == 1);
+        /* force call of (external) callback */
+        _call_callback();
 
         return;
     }
