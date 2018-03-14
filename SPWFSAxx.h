@@ -420,13 +420,6 @@ private:
         }
     }
 
-    /* unblock & force call of (external) callback */
-    void _unblock_and_callback(void) {
-        MBED_ASSERT(_call_event_callback_blocked == 1);
-        _call_event_callback_blocked = 0;
-        _call_callback();
-    }
-
     /* trigger call of (external) callback in case there is still data */
     void _trigger_event_callback(void) {
         MBED_ASSERT(_call_event_callback_blocked == 0);
