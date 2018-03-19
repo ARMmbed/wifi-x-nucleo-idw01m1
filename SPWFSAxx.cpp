@@ -34,8 +34,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _associated_interface(ifce),
   _call_event_callback_blocked(0),
   _callback_func(),
-  _packets(0), _packets_end(&_packets),
-  _msg_buffer(ssid_buf)
+  _packets(0), _packets_end(&_packets)
 {
     memset(_pending_pkt_sizes, 0, sizeof(_pending_pkt_sizes));
 
@@ -342,7 +341,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 
     trials = 0;
     while(true) {
-        if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf())
+        if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf())
         {
             if(strstr(_msg_buffer, ":24:") != NULL) { // WiFi Up
                 debug_if(true, "AT^ %s\n", _msg_buffer);
@@ -784,7 +783,7 @@ void SPWFSAxx::_event_handler(void)
  */
 void SPWFSAxx::_error_handler(void)
 {
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
         debug_if(true, "AT^ ERROR:%s (%d)\r\n", _msg_buffer, __LINE__);
     } else {
         debug_if(true, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
@@ -949,7 +948,7 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
 void SPWFSAxx::_hard_fault_handler(void)
 {
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
     error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
@@ -1034,7 +1033,7 @@ _get_out:
  */
 void SPWFSAxx::_skip_oob(void)
 {
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
         debug_if(true, "AT^ +WIND:24:WiFi Up::%s\r\n", _msg_buffer);
     } else {
         debug_if(true, "\r\nSPWF> Invalid string in SPWFSAxx::_skip_oob (%d)\r\n", __LINE__);
