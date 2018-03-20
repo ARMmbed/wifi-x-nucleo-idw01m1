@@ -434,8 +434,7 @@ private:
     char _netmask_buffer[16];
     char _mac_buffer[18];
 
-    char ssid_buf[256]; /* required to handle not 802.11 compliant ssid's */
-    char *_msg_buffer;
+    char _msg_buffer[256];
 
 private:
     friend class SPWFSA01;
