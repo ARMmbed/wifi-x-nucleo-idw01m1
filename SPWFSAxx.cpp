@@ -497,10 +497,12 @@ bool SPWFSAxx::isConnected(void)
     return _associated_interface._connected_to_network;
 }
 
-bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
+nsapi_size_or_error_t SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount, int internal_id)
 {
     uint32_t sent = 0U, to_send;
-    bool ret = true;
+    nsapi_size_or_error_t ret;
+
+    _process_winds(); // perform async indication handling (to early detect eventually closed sockets)
 
     /* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
     for(to_send = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
@@ -509,16 +511,26 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
         {
             BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
-            if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
+            if (!(_associated_interface._socket_is_still_connected(internal_id)
+                    && _parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                     && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                     && _recv_ok())) {
-                // betzw - TODO: handle different errors more accurately!
-                ret = false;
                 break;
             }
         }
 
         sent += to_send;
+    }
+
+    // betzw - TODO: handle different errors more accurately!
+    if(sent > 0) { // `sent == 0` indicates a potential error
+        ret = sent;
+    } else if(amount == 0) {
+        ret = NSAPI_ERROR_OK;
+    } else if(_associated_interface._socket_is_still_connected(internal_id)) {
+        ret = NSAPI_ERROR_DEVICE_ERROR;
+    } else {
+        ret = NSAPI_ERROR_CONNECTION_LOST;
     }
 
     return ret;

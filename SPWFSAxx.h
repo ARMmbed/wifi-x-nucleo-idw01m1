@@ -187,12 +187,13 @@ public:
     /**
      * Sends data to an open socket
      *
-     * @param id id of socket to send to
+     * @param spwf_id module id of socket to send to
      * @param data data to be sent
      * @param amount amount of data to be sent - max 1024
-     * @return true only if data sent successfully
+     * @param internal_id driver id of socket to send to
+     * @return number of written bytes on success, negative on failure
      */
-    bool send(int id, const void *data, uint32_t amount);
+    nsapi_size_or_error_t send(int spwf_id, const void *data, uint32_t amount, int internal_id);
 
     /**
      * Receives data from an open socket
