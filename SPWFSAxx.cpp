@@ -706,9 +706,7 @@ bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
 
-    if(((unsigned int)spwf_id) >= ((unsigned int)SPWFSA_SOCKET_COUNT)) {
-        goto close_bh_handling; // `ret == false`
-    }
+    MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)); // `spwf_id` is valid
 
     for(int retry_cnt = 0; retry_cnt < SPWFXX_MAX_TRIALS; retry_cnt++) {
         // Flush out pending data
@@ -743,7 +741,6 @@ bool SPWFSAxx::close(int spwf_id)
         }
     }
 
-close_bh_handling:
     /* anticipate bottom halves */
     _execute_bottom_halves();
 
