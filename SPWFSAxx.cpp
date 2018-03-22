@@ -1180,10 +1180,11 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             /* reset pending data sizes */
             _reset_pending_pkt_sizes(spwf_id);
             /* create new entry for pending size */
-            _add_pending_packet_sz(spwf_id, (uint32_t)pending);
-
-            pending = wind_pending = _get_pending_pkt_size(spwf_id);
-            MBED_ASSERT(wind_pending > 0);
+            _add_pending_pkt_size(spwf_id, (uint32_t)pending);
+#ifndef NDEBUG
+            wind_pending = _get_pending_pkt_size(spwf_id);
+            MBED_ASSERT(pending == (int)wind_pending);
+#endif
         } else if(pending < 0) {
             debug_if(_dbg_on, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
         }
