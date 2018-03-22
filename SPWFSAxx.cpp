@@ -34,8 +34,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
   _associated_interface(ifce),
   _call_event_callback_blocked(0),
   _callback_func(),
-  _packets(0), _packets_end(&_packets),
-  _msg_buffer(ssid_buf)
+  _packets(0), _packets_end(&_packets)
 {
     memset(_pending_pkt_sizes, 0, sizeof(_pending_pkt_sizes));
 
@@ -61,49 +60,49 @@ bool SPWFSAxx::startup(int mode)
 
     /*Reset module*/
     if(!hw_reset()) {
-        debug_if(_dbg_on, "\r\nSPWF> HW reset failed\r\n");
+        debug_if(true, "\r\nSPWF> HW reset failed\r\n");
         return false;
     }
 
     /* factory reset */
     if(!(_parser.send(SPWFXX_SEND_FWCFG) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error restore factory default settings\r\n");
+        debug_if(true, "\r\nSPWF> error restore factory default settings\r\n");
         return false;
     }
 
     /*switch off led*/
     if(!(_parser.send("AT+S.SCFG=blink_led,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error stop blinking led (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> error stop blinking led (%d)\r\n", __LINE__);
         return false;
     }
 
     /*set local echo to 0*/
     if(!(_parser.send(SPWFXX_SEND_DISABLE_LE) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error local echo set\r\n");
+        debug_if(true, "\r\nSPWF> error local echo set\r\n");
         return false;
     }
 
     /*set Wi-Fi mode and rate to b/g/n*/
     if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
+        debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
     /*set the operational rate*/
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error setting operational rates\r\n");
+        debug_if(true, "\r\nSPWF> error setting operational rates\r\n");
         return false;
     }
 
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,%d", mode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -112,7 +111,7 @@ bool SPWFSAxx::startup(int mode)
     /*disable HW flow control*/
     if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+        debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
         return false;
     }
 #else // DEVICE_SERIAL_FC && (MBED_VERSION >= MBED_ENCODE_VERSION(5, 7, 0))
@@ -120,7 +119,7 @@ bool SPWFSAxx::startup(int mode)
         /*enable HW flow control*/
         if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error enabling HW flow control\r\n");
             return false;
         }
 
@@ -130,7 +129,7 @@ bool SPWFSAxx::startup(int mode)
         /*disable HW flow control*/
         if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
             return false;
         }
     }
@@ -140,7 +139,7 @@ bool SPWFSAxx::startup(int mode)
     /*disable HW flow control*/
     if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+        debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
         return false;
     }
 #else // DEVICE_SERIAL_FC
@@ -148,7 +147,7 @@ bool SPWFSAxx::startup(int mode)
         /*enable HW flow control*/
         if(!(_parser.send(SPWFXX_SEND_ENABLE_FC) && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error enabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error enabling HW flow control\r\n");
             return false;
         }
 
@@ -158,7 +157,7 @@ bool SPWFSAxx::startup(int mode)
         /*disable HW flow control*/
         if(!(_parser.send(SPWFXX_SEND_DISABLE_FC) && _recv_ok()))
         {
-            debug_if(_dbg_on, "\r\nSPWF> error disabling HW flow control\r\n");
+            debug_if(true, "\r\nSPWF> error disabling HW flow control\r\n");
             return false;
         }
     }
@@ -170,26 +169,26 @@ bool SPWFSAxx::startup(int mode)
 
     /* sw reset */
     if(!reset()) {
-        debug_if(_dbg_on, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
 
 #ifndef NDEBUG
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_STATE)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting console state\r\n");
+        debug_if(true, "\r\nSPWF> error getting console state\r\n");
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_SPEED)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting console speed\r\n");
+        debug_if(true, "\r\nSPWF> error getting console speed\r\n");
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_HWFC_STATE)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting hwfc state\r\n");
+        debug_if(true, "\r\nSPWF> error getting hwfc state\r\n");
         return false;
     }
 
@@ -199,32 +198,32 @@ bool SPWFSAxx::startup(int mode)
      */
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_DELIM)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting console delimiter\r\n");
+        debug_if(true, "\r\nSPWF> error getting console delimiter\r\n");
         return false;
     }
 
     if (!(_parser.send(SPWFXX_SEND_GET_CONS_ERRS)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting console error setting\r\n");
+        debug_if(true, "\r\nSPWF> error getting console error setting\r\n");
         return false;
     }
 #endif // (MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1) || defined(IDW01M1_FW_REL_35X)
 
     if (!(_parser.send("AT+S.GCFG=sleep_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting sleep state enabled\r\n");
+        debug_if(true, "\r\nSPWF> error getting sleep state enabled\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=wifi_powersave")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting powersave mode\r\n");
+        debug_if(true, "\r\nSPWF> error getting powersave mode\r\n");
         return false;
     }
 
     if (!(_parser.send("AT+S.GCFG=standby_enabled")
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> error getting standby state enabled\r\n");
+        debug_if(true, "\r\nSPWF> error getting standby state enabled\r\n");
         return false;
     }
 #endif
@@ -237,7 +236,7 @@ bool SPWFSAxx::_wait_console_active(void) {
 
     while(true) {
         if (_parser.recv("+WIND:0:Console active\n") && _recv_delim_lf()) {
-            debug_if(_dbg_on, "AT^ +WIND:0:Console active\r\n");
+            debug_if(true, "AT^ +WIND:0:Console active\r\n");
             return true;
         }
         if(++trials >= SPWFXX_MAX_TRIALS) {
@@ -253,7 +252,7 @@ bool SPWFSAxx::_wait_wifi_hw_started(void) {
 
     while(true) {
         if (_parser.recv("+WIND:32:WiFi Hardware Started\n") && _recv_delim_lf()) {
-            debug_if(_dbg_on, "AT^ +WIND:32:WiFi Hardware Started\r\n");
+            debug_if(true, "AT^ +WIND:32:WiFi Hardware Started\r\n");
             return true;
         }
         if(++trials >= SPWFXX_MAX_TRIALS) {
@@ -283,7 +282,7 @@ bool SPWFSAxx::reset(void)
     /* save current setting in flash */
     if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error saving configuration to flash\r\n");
+        debug_if(true, "\r\nSPWF> error saving configuration to flash\r\n");
         return false;
     }
 
@@ -309,43 +308,43 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error pass set\r\n");
+        debug_if(true, "\r\nSPWF> error pass set\r\n");
         return false;
     } 
 
     //AT+S.SSIDTXT=%s
     if(!(_parser.send("AT+S.SSIDTXT=%s", ap) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error ssid set\r\n");
+        debug_if(true, "\r\nSPWF> error ssid set\r\n");
         return false;
     }
 
     //AT+S.SCFG=wifi_priv_mode,%d
     if(!(_parser.send("AT+S.SCFG=wifi_priv_mode,%d", securityMode) && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error security mode set\r\n");
+        debug_if(true, "\r\nSPWF> error security mode set\r\n");
         return false;
     }
 
     /*set STA mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set 1 (STA)\r\n");
+        debug_if(true, "\r\nSPWF> error WiFi mode set 1 (STA)\r\n");
         return false;
     }
 
     /* sw reset */
     if(!reset()) {
-        debug_if(_dbg_on, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
 
     trials = 0;
     while(true) {
-        if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf())
+        if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf())
         {
             if(strstr(_msg_buffer, ":24:") != NULL) { // WiFi Up
-                debug_if(_dbg_on, "AT^ %s\n", _msg_buffer);
+                debug_if(true, "AT^ %s\n", _msg_buffer);
                 if(strchr(_msg_buffer, '.') != NULL) { // IPv4 address
                     break;
                 } else {
@@ -353,7 +352,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
                 }
             }
             if(strstr(_msg_buffer, ":40:") != NULL) { // Deauthentication
-                debug_if(_dbg_on, "AT~ %s\n", _msg_buffer);
+                debug_if(true, "AT~ %s\n", _msg_buffer);
                 if(++trials < 3) { // give it three trials
                     continue;
                 }
@@ -361,7 +360,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
                 disconnect();
                 return false;
             } else {
-                debug_if(_dbg_on, "AT] %s\n", _msg_buffer);
+                debug_if(true, "AT] %s\n", _msg_buffer);
             }
             continue;
         }
@@ -381,7 +380,7 @@ bool SPWFSAxx::disconnect(void)
     /*disable Wi-Fi device*/
     if(!(_parser.send("AT+S.WIFI=0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error disabling WiFi\r\n");
+        debug_if(true, "\r\nSPWF> error disabling WiFi\r\n");
         return false;
     }
 #endif // IDW04A1
@@ -389,7 +388,7 @@ bool SPWFSAxx::disconnect(void)
     /*set idle mode (0->idle, 1->STA,3->miniAP, 2->IBSS)*/
     if(!(_parser.send("AT+S.SCFG=wifi_mode,0") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> error WiFi mode set idle (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -397,14 +396,14 @@ bool SPWFSAxx::disconnect(void)
     /*enable Wi-Fi device*/
     if(!(_parser.send("AT+S.WIFI=1") && _recv_ok()))
     {
-        debug_if(_dbg_on, "\r\nSPWF> error enabling WiFi\r\n");
+        debug_if(true, "\r\nSPWF> error enabling WiFi\r\n");
         return false;
     }
 #endif // IDW04A1
 
     // reset module
     if(!reset()) {
-        debug_if(_dbg_on, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
 
@@ -418,7 +417,7 @@ const char *SPWFSAxx::getIPAddress(void)
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
             && _parser.recv(SPWFXX_RECV_IP_ADDR, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> get IP address error\r\n");
+        debug_if(true, "\r\nSPWF> get IP address error\r\n");
         return NULL;
     }
 
@@ -435,7 +434,7 @@ const char *SPWFSAxx::getGateway(void)
     if (!(_parser.send("AT+S.STS=ip_gw")
             && _parser.recv(SPWFXX_RECV_GATEWAY, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> get gateway error\r\n");
+        debug_if(true, "\r\nSPWF> get gateway error\r\n");
         return NULL;
     }
 
@@ -452,7 +451,7 @@ const char *SPWFSAxx::getNetmask(void)
     if (!(_parser.send("AT+S.STS=ip_netmask")
             && _parser.recv(SPWFXX_RECV_NETMASK, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> get netmask error\r\n");
+        debug_if(true, "\r\nSPWF> get netmask error\r\n");
         return NULL;
     }
 
@@ -469,7 +468,7 @@ int8_t SPWFSAxx::getRssi(void)
     if (!(_parser.send("AT+S.PEERS=0,rx_rssi")
             && _parser.recv(SPWFXX_RECV_RX_RSSI, &ret)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> get RX rssi error\r\n");
+        debug_if(true, "\r\nSPWF> get RX rssi error\r\n");
         return 0;
     }
 
@@ -483,7 +482,7 @@ const char *SPWFSAxx::getMACAddress(void)
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
             && _parser.recv(SPWFXX_RECV_MAC_ADDR, &n1, &n2, &n3, &n4, &n5, &n6)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> get MAC address error\r\n");
+        debug_if(true, "\r\nSPWF> get MAC address error\r\n");
         return 0;
     }
 
@@ -498,10 +497,12 @@ bool SPWFSAxx::isConnected(void)
     return _associated_interface._connected_to_network;
 }
 
-bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
+nsapi_size_or_error_t SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount, int internal_id)
 {
     uint32_t sent = 0U, to_send;
-    bool ret = true;
+    nsapi_size_or_error_t ret;
+
+    _process_winds(); // perform async indication handling (to early detect eventually closed sockets)
 
     /* betzw - WORK AROUND module FW issues: split up big packages in smaller ones */
     for(to_send = (amount > SPWFXX_SEND_RECV_PKTSIZE) ? SPWFXX_SEND_RECV_PKTSIZE : amount;
@@ -510,16 +511,26 @@ bool SPWFSAxx::send(int spwf_id, const void *data, uint32_t amount)
         {
             BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
-            if (!(_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
+            if (!(_associated_interface._socket_is_still_connected(internal_id)
+                    && _parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
                     && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
                     && _recv_ok())) {
-                // betzw - TODO: handle different errors more accurately!
-                ret = false;
                 break;
             }
         }
 
         sent += to_send;
+    }
+
+    // betzw - TODO: handle different errors more accurately!
+    if(sent > 0) { // `sent == 0` indicates a potential error
+        ret = sent;
+    } else if(amount == 0) {
+        ret = NSAPI_ERROR_OK;
+    } else if(_associated_interface._socket_is_still_connected(internal_id)) {
+        ret = NSAPI_ERROR_DEVICE_ERROR;
+    } else {
+        ret = NSAPI_ERROR_CONNECTION_LOST;
     }
 
     return ret;
@@ -531,7 +542,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
     if (!(_parser.send("AT+S.SOCKQ=%d", spwf_id)
             && _parser.recv(SPWFXX_RECV_DATALEN, &amount)
             && _recv_ok())) {
-        debug_if(_dbg_on, "\r\nSPWF> %s failed\r\n", __func__);
+        debug_if(true, "\r\nSPWF> %s failed\r\n", __func__);
         return SPWFXX_ERR_LEN;
     }
 
@@ -550,13 +561,13 @@ void SPWFSAxx::_winds_on(void) {
     MBED_ASSERT(_is_event_callback_blocked());
 
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
     }
 }
 
@@ -568,7 +579,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -577,7 +588,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -586,7 +597,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -641,7 +652,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
 #else // NDEBUG
         debug("%s(%d): Out of memory!\r\n", __func__, __LINE__);
 #endif
-        debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_OOM; /* out of memory: give up here! */
     }
 
@@ -653,7 +664,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     /* read data in */
     if(!(_read_in((char*)(packet + 1), spwf_id, amount) > 0)) {
         free(packet);
-        debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_READ;
     } else {
         debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
@@ -723,7 +734,7 @@ bool SPWFSAxx::close(int spwf_id)
             ret = true;
             break; // finish closing
         } else { // close failed
-            debug_if(_dbg_on, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
+            debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
             /* interleave bottom halves */
             _execute_bottom_halves();
 
@@ -746,7 +757,7 @@ close_bh_handling:
         /* reset pending data sizes */
         _reset_pending_pkt_sizes(spwf_id);
     } else {
-        debug_if(_dbg_on, "\r\nSPWF> SPWFSAxx::close failed (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> SPWFSAxx::close failed (%d)\r\n", __LINE__);
 
         int internal_id = _associated_interface.get_internal_id(spwf_id);
         if(!_associated_interface._socket_is_still_connected(internal_id)) {
@@ -784,10 +795,10 @@ void SPWFSAxx::_event_handler(void)
  */
 void SPWFSAxx::_error_handler(void)
 {
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
-        debug_if(_dbg_on, "AT^ ERROR:%s (%d)\r\n", _msg_buffer, __LINE__);
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+        debug_if(true, "AT^ ERROR:%s (%d)\r\n", _msg_buffer, __LINE__);
     } else {
-        debug_if(_dbg_on, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> Unknown ERROR string in SPWFSAxx::_error_handler (%d)\r\n", __LINE__);
     }
 
     /* force call of (external) callback */
@@ -806,12 +817,12 @@ void SPWFSAxx::_network_lost_handler_th(void)
 
     _recv_delim_cr_lf();
 
-    debug_if(_dbg_on, "AT^ +WIND:33:WiFi Network Lost\r\n");
+    debug_if(true, "AT^ +WIND:33:WiFi Network Lost\r\n");
 
 #ifndef NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", net_loss_cnt);
+    debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", net_loss_cnt);
 #else // NDEBUG
-    debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", __LINE__);
+    debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", __LINE__);
 #endif // NDEBUG
 
     /* set flag to signal network loss */
@@ -829,7 +840,7 @@ void SPWFSAxx::_add_pending_packet_sz(int spwf_id, uint32_t size) {
     uint32_t added = _get_cumulative_size(spwf_id);
 
     if(size <= added) { // might happen due to delayed WIND delivery
-        debug_if(_dbg_on, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
         return;
     }
 
@@ -879,7 +890,7 @@ void SPWFSAxx::_packet_handler_th(void)
 
         MBED_ASSERT(_get_pending_pkt_size(spwf_id) != 0);
     } else {
-        debug_if(_dbg_on, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
+        debug_if(true, "\r\nSPWFSAxx::%s got invalid id %d\r\n", __func__, spwf_id);
     }
 }
 
@@ -905,25 +916,25 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                    debug_if(_dbg_on, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
+                    debug_if(true, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
                     goto nlh_get_out;
                 }
 
                 if((_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
-                    debug_if(_dbg_on, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
+                    debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                     _associated_interface._connected_to_network = true;
                     goto nlh_get_out;
                 }
             }
         } else {
-            debug_if(_dbg_on, "Leaving SPWFSAxx::_network_lost_handler_bh\r\n");
+            debug_if(true, "Leaving SPWFSAxx::_network_lost_handler_bh\r\n");
             goto nlh_get_out;
         }
 
     nlh_get_out:
-        debug_if(_dbg_on, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
+        debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
         _parser.set_timeout(_timeout);
 
         /* force call of (external) callback */
@@ -949,7 +960,7 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
 void SPWFSAxx::_hard_fault_handler(void)
 {
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
 
 #ifndef NDEBUG
     error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
@@ -1010,7 +1021,7 @@ void SPWFSAxx::_server_gone_handler(void)
         goto _get_out;
     }
 
-    debug_if(_dbg_on, "AT^ +WIND:58:Socket Closed:%d\r\n", spwf_id);
+    debug_if(true, "AT^ +WIND:58:Socket Closed:%d\r\n", spwf_id);
 
     /* check for the module to report a valid id */
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT));
@@ -1034,10 +1045,10 @@ _get_out:
  */
 void SPWFSAxx::_skip_oob(void)
 {
-    if(_parser.recv("%[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
-        debug_if(_dbg_on, "AT^ +WIND:24:WiFi Up::%s\r\n", _msg_buffer);
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
+        debug_if(true, "AT^ +WIND:24:WiFi Up::%s\r\n", _msg_buffer);
     } else {
-        debug_if(_dbg_on, "\r\nSPWF> Invalid string in SPWFSAxx::_skip_oob (%d)\r\n", __LINE__);
+        debug_if(true, "\r\nSPWF> Invalid string in SPWFSAxx::_skip_oob (%d)\r\n", __LINE__);
     }
 }
 #endif
@@ -1132,13 +1143,13 @@ void SPWFSAxx::_process_winds(void) {
                 if(_parser.process_oob()) {
                     /* something to do? */;
                 } else {
-                    debug_if(_dbg_on, "%s():\t\tNo oob's found!\r\n", __func__);
+                    debug_if(true, "%s():\t\tNo oob's found!\r\n", __func__);
                     return; // no oob's found
                 }
             }
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
             else {
-                debug_if(_dbg_on, "%s():\t\tNo delimiters found!\r\n", __func__);
+                debug_if(true, "%s():\t\tNo delimiters found!\r\n", __func__);
                 return; // no leading delimiters
             }
 #endif
@@ -1174,7 +1185,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             pending = wind_pending = _get_pending_pkt_size(spwf_id);
             MBED_ASSERT(wind_pending > 0);
         } else if(pending < 0) {
-            debug_if(_dbg_on, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
+            debug_if(true, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
         }
     } else { // only read in already notified data
         pending = wind_pending = _get_pending_pkt_size(spwf_id);
@@ -1187,14 +1198,14 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
 
                 if(wind_pending == 0) {
                     /* betzw - WORK AROUND module FW issues: create new entry for pending size */
-                    debug_if(_dbg_on, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
+                    debug_if(true, "%s():\t\tAdd packet w/o WIND (%d)!\r\n", __func__, pending);
                     _add_pending_packet_sz(spwf_id, (uint32_t)pending);
 
                     pending = wind_pending = _get_pending_pkt_size(spwf_id);
                     MBED_ASSERT(wind_pending > 0);
                 }
             } else if(pending < 0) {
-                debug_if(_dbg_on, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
+                debug_if(true, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
             }
         }
     }

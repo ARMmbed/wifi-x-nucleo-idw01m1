@@ -1,18 +1,18 @@
 /* mbed Microcontroller Library
-* Copyright (c) 20015 ARM Limited
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Copyright (c) 20015 ARM Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /**
   ******************************************************************************
@@ -56,15 +56,6 @@ static Callback<void()> _callback_spwf_unlock(&_spwf_unlock);
 #endif
 
 
-/**
- * @brief  SpwfSAInterface constructor
- * @param  tx: Pin USART TX
- *         rx: Pin USART RX
- *         rts: Pin USART RTS
- *         cts: Pin USART RTS
- *         debug : not used
- * @retval none
- */
 SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx,
                                  PinName rts, PinName cts, bool debug,
                                  PinName wakeup, PinName reset)
@@ -75,12 +66,6 @@ SpwfSAInterface::SpwfSAInterface(PinName tx, PinName rx,
     reset_credentials();
 }
 
-/**
- * @brief  init function
- *         initializes SPWF FW and module
- * @param  none
- * @retval error value
- */
 nsapi_error_t SpwfSAInterface::init(void)
 {
     _spwf.setTimeout(SPWF_INIT_TIMEOUT);
@@ -149,14 +134,6 @@ nsapi_error_t SpwfSAInterface::connect(void)
     return NSAPI_ERROR_OK;
 }
 
-/**
- * @brief  network connect
- *         connects to Access Point
- * @param  ap: Access Point (AP) Name String
- *         pass_phrase: Password String for AP
- *         security: type of NSAPI security supported
- * @retval NSAPI Error Type
- */
 nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi_security_t security,
                                        uint8_t channel)
 {
@@ -173,12 +150,6 @@ nsapi_error_t SpwfSAInterface::connect(const char *ssid, const char *pass, nsapi
     return connect();
 }
 
-/**
- * @brief  network disconnect
- *         disconnects from Access Point
- * @param  none
- * @retval NSAPI Error Type
- */
 nsapi_error_t SpwfSAInterface::disconnect(void)
 {
     SYNC_HANDLER;
@@ -195,12 +166,6 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
     return NSAPI_ERROR_OK;
 }
 
-/** 
- * @brief  Get the local IP address
- * @param  none
- * @retval Null-terminated representation of the local IP address
- *         or null if not yet connected
- */
 const char *SpwfSAInterface::get_ip_address(void)
 {
     SYNC_HANDLER;
@@ -209,12 +174,6 @@ const char *SpwfSAInterface::get_ip_address(void)
     return _spwf.getIPAddress();
 }
 
-/** 
- * @brief  Get the MAC address
- * @param  none
- * @retval Null-terminated representation of the MAC address
- *         or null if not yet connected
- */
 const char *SpwfSAInterface::get_mac_address(void)
 {
     SYNC_HANDLER;
@@ -243,12 +202,6 @@ const char *SpwfSAInterface::get_netmask(void)
     return _spwf.getNetmask();
 }
 
-/**
- * @brief  open a socket handle
- * @param  handle: Pointer to handle
- *         proto: TCP/UDP protocol
- * @retval NSAPI Error Type
- */
 nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto)
 {
     int internal_id;
@@ -259,7 +212,7 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
     }
 
     if(internal_id == SPWFSA_SOCKET_COUNT) {
-        debug_if(_dbg_on, "NO Socket ID Error\r\n");
+        debug_if(true, "NO Socket ID Error\r\n");
         return NSAPI_ERROR_NO_SOCKET;
     }
 
@@ -275,12 +228,6 @@ nsapi_error_t SpwfSAInterface::socket_open(void **handle, nsapi_protocol_t proto
     return NSAPI_ERROR_OK;
 }
 
-/**
- * @brief  connect to a remote socket
- * @param  handle: Pointer to socket handle
- *         addr: Address to connect to
- * @retval NSAPI Error Type
- */
 nsapi_error_t SpwfSAInterface::socket_connect(void *handle, const SocketAddress &addr)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
@@ -371,13 +318,6 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
     return NSAPI_ERROR_OK;
 }
 
-/**
- * @brief  write to a socket
- * @param  handle: Pointer to handle
- *         data: pointer to data
- *         size: size of data
- * @retval number of bytes sent
- */
 nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
@@ -386,25 +326,9 @@ nsapi_size_or_error_t SpwfSAInterface::socket_send(void *handle, const void *dat
     CHECK_NOT_CONNECTED_ERR();
 
     _spwf.setTimeout(SPWF_SEND_TIMEOUT);
-
-    if(!_socket_is_still_connected(socket)) {
-        return NSAPI_ERROR_CONNECTION_LOST;
-    }
-
-    if (!_spwf.send(socket->spwf_id, data, size)) {
-        return NSAPI_ERROR_DEVICE_ERROR;
-    }
-
-    return size;
+    return _spwf.send(socket->spwf_id, data, size, socket->internal_id);
 }
 
-/**
- * @brief  receive data on a socket
- * @param  handle: Pointer to handle
- *         data: pointer to data
- *         size: size of data
- * @retval number of bytes read or negative error code in case of error
- */
 nsapi_size_or_error_t SpwfSAInterface::socket_recv(void *handle, void *data, unsigned size)
 {
     SYNC_HANDLER;
@@ -441,14 +365,6 @@ nsapi_size_or_error_t SpwfSAInterface::_socket_recv(void *handle, void *data, un
     return recv;
 }
 
-/**
- * @brief  send data to a udp socket
- * @param  handle: Pointer to handle
- *         addr: address of udp socket
- *         data: pointer to data
- *         size: size of data
- * @retval number of bytes sent
- */
 nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
@@ -476,14 +392,6 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
     return socket_send(socket, data, size);
 }
 
-/**
- * @brief  receive data on a udp socket
- * @param  handle: Pointer to handle
- *         addr: address of udp socket
- *         data: pointer to data
- *         size: size of data
- * @retval number of bytes read
- */
 nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;
@@ -500,13 +408,6 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddre
     return ret;
 }
 
-/**
- * @brief  attach function/callback to the socket
- * @param  handle: Pointer to handle
- *         callback: callback function pointer
- *         data: pointer to data
- * @retval none
- */
 void SpwfSAInterface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
     spwf_socket_t *socket = (spwf_socket_t*)handle;

@@ -128,7 +128,7 @@ public:
     virtual nsapi_error_t set_channel(uint8_t channel);
 
     /** Stop the interface
-     *  @return             0 on success, negative on failure
+     *  @return             `NSAPI_ERROR_OK` on success, negative on failure
      */
     virtual nsapi_error_t disconnect();
 
@@ -202,13 +202,13 @@ private:
     /** Open a socket
      *  @param handle       Handle in which to store new socket
      *  @param proto        Type of socket to open, NSAPI_TCP or NSAPI_UDP
-     *  @return             0 on success, negative on failure
+     *  @return             `NSAPI_ERROR_OK` on success, negative on failure
      */
     virtual nsapi_error_t socket_open(void **handle, nsapi_protocol_t proto);
 
     /** Close the socket
      *  @param handle       Socket handle
-     *  @return             0 on success, negative on failure
+     *  @return             `NSAPI_ERROR_OK` on success, negative on failure
      *  @note On failure, any memory associated with the socket must still
      *        be cleaned up
      */
@@ -238,7 +238,7 @@ private:
     /** Connects this TCP socket to the server
      *  @param handle       Socket handle
      *  @param address      SocketAddress to connect to
-     *  @return             0 on success, negative on failure
+     *  @return             `NSAPI_ERROR_OK` on success, negative on failure
      */
     virtual nsapi_error_t socket_connect(void *handle, const SocketAddress &address);
 
