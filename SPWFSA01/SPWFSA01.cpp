@@ -35,7 +35,7 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
 
     if(!_parser.send("AT+S.SOCKON=%s,%d,%s,ind", addr, port, type))
     {
-        debug_if(true, "\r\nSPWF> `SPWFSA01::open`: error opening socket (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> `SPWFSA01::open`: error opening socket (%d)\r\n", __LINE__);
         return false;
     }
 
@@ -54,13 +54,13 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
     }
 
     if(value != _cr_) { // Note: this is different to what the spec exactly says
-        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
         empty_rx_buffer();
         return false;
     }
 
     if(!_recv_delim_lf()) { // Note: this is different to what the spec exactly says
-        debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+        debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
         empty_rx_buffer();
         return false;
     }
@@ -80,14 +80,14 @@ bool SPWFSA01::open(const char *type, int* spwf_id, const char* addr, int port)
             break;
         case 'E':
             if(_parser.recv("RROR: %255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
-                debug_if(true, "AT^ ERROR: %s (%d)\r\n", _msg_buffer, __LINE__);
+                debug_if(_dbg_on, "AT^ ERROR: %s (%d)\r\n", _msg_buffer, __LINE__);
             } else {
-                debug_if(true, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
+                debug_if(_dbg_on, "\r\nSPWF> error opening socket (%d)\r\n", __LINE__);
                 empty_rx_buffer();
             }
             break;
         default:
-            debug_if(true, "\r\nSPWF> error opening socket (value=%d, %d)\r\n", value, __LINE__);
+            debug_if(_dbg_on, "\r\nSPWF> error opening socket (value=%d, %d)\r\n", value, __LINE__);
             break;
     }
 
@@ -120,15 +120,15 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
                  * (MUST be done before next async indications handling (e.g. `_winds_on()`)) */
                 _remove_pending_pkt_size(spwf_id, amount);
             } else {
-                debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
+                debug_if(_dbg_on, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
                 empty_rx_buffer();
             }
         } else {
-            debug_if(true, "%s(%d): failed to read binary data (%u:%d)\r\n", __func__, __LINE__, amount, read);
+            debug_if(_dbg_on, "%s(%d): failed to read binary data (%u:%d)\r\n", __func__, __LINE__, amount, read);
             empty_rx_buffer();
         }
     } else {
-        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
+        debug_if(_dbg_on, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
     }
 
     debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
