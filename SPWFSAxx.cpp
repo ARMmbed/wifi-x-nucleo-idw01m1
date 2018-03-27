@@ -85,17 +85,17 @@ bool SPWFSAxx::startup(int mode)
         return false;
     }
 
-    /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
-    {
-        debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
-        return false;
-    }
-
-    /*set the operational rate*/
+    /*set the operational rates*/
     if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
         debug_if(true, "\r\nSPWF> error setting operational rates\r\n");
+        return false;
+    }
+
+    /*enable the 802.11n mode*/
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
+    {
+        debug_if(true, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
@@ -353,11 +353,11 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
             }
             if(strstr(_msg_buffer, ":40:") != NULL) { // Deauthentication
                 debug_if(true, "AT~ %s\n", _msg_buffer);
-                if(++trials < 3) { // give it three trials
+                if(++trials < SPWFXX_MAX_TRIALS) { // give it three trials
                     continue;
                 }
-                empty_rx_buffer();
                 disconnect();
+                empty_rx_buffer();
                 return false;
             } else {
                 debug_if(true, "AT] %s\n", _msg_buffer);
@@ -406,6 +406,10 @@ bool SPWFSAxx::disconnect(void)
         debug_if(true, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
+
+    /* clean up state */
+    _associated_interface.inner_constructor();
+    _free_all_packets();
 
     return true;
 }
@@ -915,6 +919,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
                     debug_if(true, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
+                    empty_rx_buffer();
                     goto nlh_get_out;
                 }
 
@@ -943,8 +948,6 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
 void SPWFSAxx::_recover_from_hard_faults(void) {
     disconnect();
-    _associated_interface.inner_constructor();
-    _free_all_packets();
     empty_rx_buffer();
 
     /* force call of (external) callback */

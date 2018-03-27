@@ -160,9 +160,6 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    /* NOTE: all sockets are gone */
-    inner_constructor();
-
     return NSAPI_ERROR_OK;
 }
 
