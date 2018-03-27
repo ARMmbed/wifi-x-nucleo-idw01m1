@@ -713,6 +713,9 @@ bool SPWFSAxx::close(int spwf_id)
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)); // `spwf_id` is valid
 
     for(int retry_cnt = 0; retry_cnt < SPWFXX_MAX_TRIALS; retry_cnt++) {
+        Timer timer;
+        timer.start();
+
         // Flush out pending data
         while(true) {
             int amount = _read_in_pkt(spwf_id, true);
@@ -722,6 +725,13 @@ bool SPWFSAxx::close(int spwf_id)
                 break;
             }
             if(amount == 0) break; // no more data to be read
+
+            /* Try to work around module API bug:
+             * break out & try to close after 20 seconds
+             */
+            if(timer.read() > 20) {
+                break;
+            }
 
             /* immediately free packet(s) (to avoid "out of memory") */
             _free_packets(spwf_id);
