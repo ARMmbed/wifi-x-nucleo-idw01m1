@@ -42,15 +42,18 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debug_on(debug);
 
-    _parser.oob("+WIND:55:Pending Data", callback(this, &SPWFSAxx::_packet_handler_th));
-    _parser.oob("+WIND:58:Socket Closed", callback(this, &SPWFSAxx::_server_gone_handler));
-    _parser.oob("+WIND:33:WiFi Network Lost", callback(this, &SPWFSAxx::_network_lost_handler_th));
-    _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
+    /* unlikely OOBs */
     _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
-    _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+    _parser.oob("+WIND:33:WiFi Network Lost", callback(this, &SPWFSAxx::_network_lost_handler_th));
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
     _parser.oob("+WIND:24:WiFi Up::", callback(this, &SPWFSAxx::_skip_oob));
 #endif
+    _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
+
+    /* most likely OOBs */
+    _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+    _parser.oob("+WIND:58:Socket Closed", callback(this, &SPWFSAxx::_server_gone_handler));
+    _parser.oob("+WIND:55:Pending Data", callback(this, &SPWFSAxx::_packet_handler_th));
 }
 
 bool SPWFSAxx::startup(int mode)
@@ -85,15 +88,15 @@ bool SPWFSAxx::startup(int mode)
         return false;
     }
 
-    /*set Wi-Fi mode and rate to b/g/n*/
-    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
+    /*set the operational rates*/
+    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error setting ht_mode\r\n");
         return false;
     }
 
-    /*set the operational rate*/
-    if(!(_parser.send("AT+S.SCFG=wifi_opr_rate_mask,0x003FFFCF") && _recv_ok()))
+    /*enable the 802.11n mode*/
+    if(!(_parser.send("AT+S.SCFG=wifi_ht_mode,1") && _recv_ok()))
     {
         debug_if(_dbg_on, "\r\nSPWF> error setting operational rates\r\n");
         return false;
@@ -353,11 +356,11 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
             }
             if(strstr(_msg_buffer, ":40:") != NULL) { // Deauthentication
                 debug_if(_dbg_on, "AT~ %s\n", _msg_buffer);
-                if(++trials < 3) { // give it three trials
+                if(++trials < SPWFXX_MAX_TRIALS) { // give it three trials
                     continue;
                 }
-                empty_rx_buffer();
                 disconnect();
+                empty_rx_buffer();
                 return false;
             } else {
                 debug_if(_dbg_on, "AT] %s\n", _msg_buffer);
@@ -406,6 +409,10 @@ bool SPWFSAxx::disconnect(void)
         debug_if(_dbg_on, "\r\nSPWF> SW reset failed (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
+
+    /* clean up state */
+    _associated_interface.inner_constructor();
+    _free_all_packets();
 
     return true;
 }
@@ -709,6 +716,9 @@ bool SPWFSAxx::close(int spwf_id)
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)); // `spwf_id` is valid
 
     for(int retry_cnt = 0; retry_cnt < SPWFXX_MAX_TRIALS; retry_cnt++) {
+        Timer timer;
+        timer.start();
+
         // Flush out pending data
         while(true) {
             int amount = _read_in_pkt(spwf_id, true);
@@ -718,6 +728,13 @@ bool SPWFSAxx::close(int spwf_id)
                 break;
             }
             if(amount == 0) break; // no more data to be read
+
+            /* Try to work around module API bug:
+             * break out & try to close after 20 seconds
+             */
+            if(timer.read() > 20) {
+                break;
+            }
 
             /* immediately free packet(s) (to avoid "out of memory") */
             _free_packets(spwf_id);
@@ -915,6 +932,7 @@ void SPWFSAxx::_network_lost_handler_bh(void)
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
                     debug_if(_dbg_on, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
+                    empty_rx_buffer();
                     goto nlh_get_out;
                 }
 
@@ -943,8 +961,6 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
 void SPWFSAxx::_recover_from_hard_faults(void) {
     disconnect();
-    _associated_interface.inner_constructor();
-    _free_all_packets();
     empty_rx_buffer();
 
     /* force call of (external) callback */
@@ -957,18 +973,24 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
 void SPWFSAxx::_hard_fault_handler(void)
 {
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
-
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+#endif // NDEBUG
+    } else {
+#ifndef NDEBUG
+        error("\r\nSPWFSAXX unknown hard fault error\r\n");
+#else // NDEBUG
+        debug("\r\nSPWFSAXX unknown hard fault error\r\n");
+#endif // NDEBUG
+    }
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.set_timeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
     _parser.set_timeout(_timeout);
-#endif // NDEBUG
 
     /* force call of (external) callback */
     _call_callback();
