@@ -42,15 +42,18 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debug_on(debug);
 
-    _parser.oob("+WIND:55:Pending Data", callback(this, &SPWFSAxx::_packet_handler_th));
-    _parser.oob("+WIND:58:Socket Closed", callback(this, &SPWFSAxx::_server_gone_handler));
-    _parser.oob("+WIND:33:WiFi Network Lost", callback(this, &SPWFSAxx::_network_lost_handler_th));
-    _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
+    /* unlikely OOBs */
     _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
-    _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+    _parser.oob("+WIND:33:WiFi Network Lost", callback(this, &SPWFSAxx::_network_lost_handler_th));
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
     _parser.oob("+WIND:24:WiFi Up::", callback(this, &SPWFSAxx::_skip_oob));
 #endif
+    _parser.oob("+WIND:8:Hard Fault", callback(this, &SPWFSAxx::_hard_fault_handler));
+
+    /* most likely OOBs */
+    _parser.oob(SPWFXX_OOB_ERROR, callback(this, &SPWFSAxx::_error_handler));
+    _parser.oob("+WIND:58:Socket Closed", callback(this, &SPWFSAxx::_server_gone_handler));
+    _parser.oob("+WIND:55:Pending Data", callback(this, &SPWFSAxx::_packet_handler_th));
 }
 
 bool SPWFSAxx::startup(int mode)
@@ -970,18 +973,24 @@ void SPWFSAxx::_recover_from_hard_faults(void) {
 void SPWFSAxx::_hard_fault_handler(void)
 {
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
-    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {}
-
+    if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+#endif // NDEBUG
+    } else {
+#ifndef NDEBUG
+        error("\r\nSPWFSAXX unknown hard fault error\r\n");
+#else // NDEBUG
+        debug("\r\nSPWFSAXX unknown hard fault error\r\n");
+#endif // NDEBUG
+    }
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.set_timeout(SPWF_HF_TIMEOUT);
     _recover_from_hard_faults();
     _parser.set_timeout(_timeout);
-#endif // NDEBUG
 
     /* force call of (external) callback */
     _call_callback();
