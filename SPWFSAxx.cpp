@@ -41,6 +41,7 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
     _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debug_on(debug);
+    _parser.set_timeout(_timeout);
 
     /* unlikely OOBs */
     _parser.oob("+WIND:5:WiFi Hardware Failure", callback(this, &SPWFSAxx::_wifi_hwfault_handler));
