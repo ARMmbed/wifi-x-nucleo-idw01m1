@@ -1163,26 +1163,11 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
 
 void SPWFSAxx::_process_winds(void) {
     do {
-        if(readable()) {
-#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
-            if(_recv_delim_cr_lf()) // betzw: only necessary for `IDW01M1`
-#endif
-            {
-                if(_parser.process_oob()) {
-                    /* something to do? */;
-                } else {
-                    debug_if(true, "%s():\t\tNo oob's found!\r\n", __func__);
-                    return; // no oob's found
-                }
-            }
-#if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
-            else {
-                debug_if(true, "\r\nSPWF> %s():\t\tNo delimiters found!\r\n", __func__);
-                return; // no leading delimiters
-            }
-#endif
+        if(_parser.process_oob()) {
+            /* nothing else to do! */;
         } else {
-            return; // no more data in buffer
+            debug_if(_dbg_on, "%s():\t\tNo (more) oob's found!\r\n", __func__);
+            return; // no (more) oob's found
         }
     } while(true);
 }
