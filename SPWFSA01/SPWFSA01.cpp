@@ -120,18 +120,18 @@ int SPWFSA01::_read_in(char* buffer, int spwf_id, uint32_t amount) {
                  * (MUST be done before next async indications handling (e.g. `_winds_on()`)) */
                 _remove_pending_pkt_size(spwf_id, amount);
             } else {
-                debug_if(true, "%s(%d): failed to receive OK\r\n", __func__, __LINE__);
+                debug_if(true, "\r\nSPWF> failed to receive OK (%s, %d)\r\n", __func__, __LINE__);
                 empty_rx_buffer();
             }
         } else {
-            debug_if(true, "%s(%d): failed to read binary data (%u:%d)\r\n", __func__, __LINE__, amount, read);
+            debug_if(true, "\r\nSPWF> failed to read binary data (%u:%d), (%s, %d)\r\n", amount, read, __func__, __LINE__);
             empty_rx_buffer();
         }
     } else {
-        debug_if(true, "%s(%d): failed to send SOCKR\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> failed to send SOCKR (%s, %d)\r\n", __func__, __LINE__);
     }
 
-    debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+    debug_if(_dbg_on, "\r\nSPWF> %s():\t%d:%d\r\n", __func__, spwf_id, amount);
 
     /* unblock asynchronous indications */
     _winds_on();
@@ -157,7 +157,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
     trials = 0;
     while(_parser.getc() != '\x09') {
         if(trials++ > SPWFXX_MAX_TRIALS) {
-            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
             return false;
         }
     }
@@ -184,17 +184,17 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
         /* decide about position of `CAPS:` */
         first = strchr(_msg_buffer, '\'');
         if(first == NULL) {
-            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
             return false;
         }
         last = strrchr(_msg_buffer, '\'');
         if((last == NULL) || (last < (first+1))) {
-            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
             return false;
         }
         rest = strstr(last, "CAPS:");
         if(rest == NULL) {
-            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
             return false;
         }
 
@@ -208,7 +208,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
 
         /* skip `CAPS: 0421 ` */
         if(strlen(rest) < 11) {
-            debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
             return false;
         }
         rest += 11;
@@ -248,7 +248,7 @@ bool SPWFSA01::_recv_ap(nsapi_wifi_ap_t *ap)
             }
         }
     } else { // ret == false
-        debug("%s (%d) - WARNING: might happen in case of RX buffer overflow!\r\n", __func__, __LINE__);
+        debug("\r\nSPWF> WARNING: might happen in case of RX buffer overflow! (%s, %d)\r\n", __func__, __LINE__);
     }
 
     return ret;

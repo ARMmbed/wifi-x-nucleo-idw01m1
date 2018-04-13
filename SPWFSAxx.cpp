@@ -38,7 +38,6 @@ SPWFSAxx::SPWFSAxx(PinName tx, PinName rx,
 {
     memset(_pending_pkt_sizes, 0, sizeof(_pending_pkt_sizes));
 
-    _serial.set_baud(SPWFXX_DEFAULT_BAUD_RATE);
     _serial.sigio(Callback<void()>(this, &SPWFSAxx::_event_handler));
     _parser.debug_on(debug);
     _parser.set_timeout(_timeout);
@@ -244,7 +243,7 @@ bool SPWFSAxx::_wait_console_active(void) {
             return true;
         }
         if(++trials >= SPWFXX_MAX_TRIALS) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> ERROR: Should never happen! (%s, %d)\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
         }
@@ -260,7 +259,7 @@ bool SPWFSAxx::_wait_wifi_hw_started(void) {
             return true;
         }
         if(++trials >= SPWFXX_MAX_TRIALS) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> ERROR: Should never happen! (%s, %d)\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
         }
@@ -286,7 +285,7 @@ bool SPWFSAxx::reset(void)
     /* save current setting in flash */
     if(!(_parser.send(SPWFXX_SEND_SAVE_SETTINGS) && _recv_ok()))
     {
-        debug_if(true, "\r\nSPWF> error saving configuration to flash\r\n");
+        debug_if(true, "\r\nSPWF> error saving configuration to flash (%s, %d)\r\n", __func__, __LINE__);
         return false;
     }
 
@@ -295,6 +294,8 @@ bool SPWFSAxx::reset(void)
                                                                      eventual closing of sockets via "WIND" asynchronous
                                                                      indications! So everything regarding the clean-up
                                                                      of these situations is handled there. */
+
+    /* waiting for HW to start */
     ret = _wait_wifi_hw_started();
 
     return ret;
@@ -369,7 +370,7 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
             continue;
         }
         if(++trials >= SPWFXX_MAX_TRIALS) {
-            debug("%s (%d) - ERROR: Should never happen!\r\n", __func__, __LINE__);
+            debug("\r\nSPWF> ERROR: Should never happen! (%s, %d)\r\n", __func__, __LINE__);
             empty_rx_buffer();
             return false;
         }
@@ -519,10 +520,18 @@ nsapi_size_or_error_t SPWFSAxx::send(int spwf_id, const void *data, uint32_t amo
         {
             BlockExecuter bh_handler(Callback<void()>(this, &SPWFSAxx::_execute_bottom_halves));
 
-            if (!(_associated_interface._socket_is_still_connected(internal_id)
-                    && _parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)
-                    && (_parser.write(((char*)data)+sent, (int)to_send) == (int)to_send)
-                    && _recv_ok())) {
+            // betzw - TODO: handle different errors more accurately!
+            if (!_associated_interface._socket_is_still_connected(internal_id)) {
+                debug_if(true, "\r\nSPWF> Socket not connected anymore: sent=%u, to_send=%u! (%s, %d)\r\n", sent, to_send, __func__, __LINE__);
+                break;
+            } else if(!_parser.send("AT+S.SOCKW=%d,%d", spwf_id, (unsigned int)to_send)) {
+                debug_if(true, "\r\nSPWF> Sending command failed: sent=%u, to_send=%u! (%s, %d)\r\n", sent, to_send, __func__, __LINE__);
+                break;
+            } else if(_parser.write(((char*)data)+sent, (int)to_send) != (int)to_send) {
+                debug_if(true, "\r\nSPWF> Sending data failed: sent=%u, to_send=%u! (%s, %d)\r\n", sent, to_send, __func__, __LINE__);
+                break;
+            } else if(!_recv_ok()) {
+                debug_if(true, "\r\nSPWF> Sending did not receive OK: sent=%u, to_send=%u! (%s, %d)\r\n", sent, to_send, __func__, __LINE__);
                 break;
             }
         }
@@ -530,7 +539,6 @@ nsapi_size_or_error_t SPWFSAxx::send(int spwf_id, const void *data, uint32_t amo
         sent += to_send;
     }
 
-    // betzw - TODO: handle different errors more accurately!
     if(sent > 0) { // `sent == 0` indicates a potential error
         ret = sent;
     } else if(amount == 0) {
@@ -555,7 +563,7 @@ int SPWFSAxx::_read_len(int spwf_id) {
     }
 
     if(amount > 0) {
-        debug_if(_dbg_on, "%s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
+        debug_if(_dbg_on, "\r\nSPWF> %s():\t\t%d:%d\r\n", __func__, spwf_id, amount);
     }
 
     MBED_ASSERT(((int)amount) >= 0);
@@ -569,13 +577,13 @@ void SPWFSAxx::_winds_on(void) {
     MBED_ASSERT(_is_event_callback_blocked());
 
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_HIGH_ON) && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_MEDIUM_ON) && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
     }
     if(!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_LOW_ON) && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
     }
 }
 
@@ -587,7 +595,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_LOW SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -596,7 +604,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_MEDIUM SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -605,7 +613,7 @@ bool SPWFSAxx::_winds_off(void) {
 
     if (!(_parser.send(SPWFXX_SEND_WIND_OFF_HIGH SPWFXX_WINDS_OFF)
             && _recv_ok())) {
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> %s failed at line #%d\r\n", __func__, __LINE__);
 #ifdef SPWFXX_SOWF // betzw: try to continue
         _winds_on();
         return false;
@@ -656,9 +664,9 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
     struct packet *packet = (struct packet*)malloc(sizeof(struct packet) + amount);
     if (!packet) {
 #ifndef NDEBUG
-        error("%s(%d): Out of memory!\r\n", __func__, __LINE__);
+        error("\r\nSPWF> %s(%d): Out of memory!\r\n", __func__, __LINE__);
 #else // NDEBUG
-        debug("%s(%d): Out of memory!\r\n", __func__, __LINE__);
+        debug("\r\nSPWF> %s(%d): Out of memory!\r\n", __func__, __LINE__);
 #endif
         debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_OOM; /* out of memory: give up here! */
@@ -675,7 +683,7 @@ int SPWFSAxx::_read_in_packet(int spwf_id, uint32_t amount) {
         debug_if(true, "\r\nSPWF> %s failed (%d)\r\n", __func__, __LINE__);
         return SPWFXX_ERR_READ;
     } else {
-        debug_if(_dbg_on, "%s():\t%d:%d\r\n", __func__, spwf_id, amount);
+        debug_if(_dbg_on, "\r\nSPWF> %s():\t%d:%d\r\n", __func__, spwf_id, amount);
 
         /* append to packet list */
         *_packets_end = packet;
@@ -835,9 +843,9 @@ void SPWFSAxx::_network_lost_handler_th(void)
     debug_if(true, "AT^ +WIND:33:WiFi Network Lost\r\n");
 
 #ifndef NDEBUG
-    debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", net_loss_cnt);
+    debug_if(true, "\r\nSPWF> Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", net_loss_cnt);
 #else // NDEBUG
-    debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", __LINE__);
+    debug_if(true, "\r\nSPWF> Getting out of SPWFSAxx::_network_lost_handler_th: %d\r\n", __LINE__);
 #endif // NDEBUG
 
     /* set flag to signal network loss */
@@ -855,7 +863,7 @@ void SPWFSAxx::_add_pending_packet_sz(int spwf_id, uint32_t size) {
     uint32_t added = _get_cumulative_size(spwf_id);
 
     if(size <= added) { // might happen due to delayed WIND delivery
-        debug_if(true, "%s: failed at line #%d\r\n", __func__, __LINE__);
+        debug_if(true, "\r\nSPWF> WARNING: %s failed at line #%d\r\n", __func__, __LINE__);
         return;
     }
 
@@ -884,7 +892,7 @@ void SPWFSAxx::_packet_handler_th(void)
     /* parse out the socket id & amount */
     if (!(_parser.recv(SPWFXX_RECV_PENDING_DATA, &spwf_id, &amount) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\nSPWFSAxx::%s failed!\r\n", __func__);
+        error("\r\nSPWF> SPWFSAxx::%s failed!\r\n", __func__);
 #endif
         return;
     }
@@ -931,26 +939,26 @@ void SPWFSAxx::_network_lost_handler_bh(void)
 
             while(true) {
                 if (timer.read_ms() > SPWF_CONNECT_TIMEOUT) {
-                    debug_if(true, "\r\nSPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
+                    debug_if(true, "\r\nSPWF> SPWFSAxx::_network_lost_handler_bh() #%d\r\n", __LINE__);
                     disconnect();
                     empty_rx_buffer();
                     goto nlh_get_out;
                 }
 
                 if((_parser.recv(SPWFXX_RECV_WIFI_UP, &n1, &n2, &n3, &n4)) && _recv_delim_lf()) {
-                    debug_if(true, "Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
+                    debug_if(true, "\r\nSPWF> Re-connected (%u.%u.%u.%u)!\r\n", n1, n2, n3, n4);
 
                     _associated_interface._connected_to_network = true;
                     goto nlh_get_out;
                 }
             }
         } else {
-            debug_if(true, "Leaving SPWFSAxx::_network_lost_handler_bh\r\n");
+            debug_if(true, "\r\nSPWF> Leaving SPWFSAxx::_network_lost_handler_bh\r\n");
             goto nlh_get_out;
         }
 
     nlh_get_out:
-        debug_if(true, "Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
+        debug_if(true, "\r\nSPWF> Getting out of SPWFSAxx::_network_lost_handler_bh\r\n");
         _parser.set_timeout(_timeout);
 
         /* force call of (external) callback */
@@ -976,15 +984,15 @@ void SPWFSAxx::_hard_fault_handler(void)
     _parser.set_timeout(SPWF_RECV_TIMEOUT);
     if(_parser.recv("%255[^\n]\n", _msg_buffer) && _recv_delim_lf()) {
 #ifndef NDEBUG
-        error("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        error("\r\nSPWF> hard fault error:\r\n%s\r\n", _msg_buffer);
 #else // NDEBUG
-        debug("\r\nSPWFSAXX hard fault error:\r\n%s\r\n", _msg_buffer);
+        debug("\r\nSPWF> hard fault error:\r\n%s\r\n", _msg_buffer);
 #endif // NDEBUG
     } else {
 #ifndef NDEBUG
-        error("\r\nSPWFSAXX unknown hard fault error\r\n");
+        error("\r\nSPWF> unknown hard fault error\r\n");
 #else // NDEBUG
-        debug("\r\nSPWFSAXX unknown hard fault error\r\n");
+        debug("\r\nSPWF> unknown hard fault error\r\n");
 #endif // NDEBUG
     }
 
@@ -1009,9 +1017,9 @@ void SPWFSAxx::_wifi_hwfault_handler(void)
     _recv_delim_lf();
 
 #ifndef NDEBUG
-    error("\r\nSPWFSAXX WiFi HW fault error: %u\r\n", failure_nr);
+    error("\r\nSPWF> WiFi HW fault error: %u\r\n", failure_nr);
 #else // NDEBUG
-    debug("\r\nSPWFSAXX WiFi HW fault error: %u\r\n", failure_nr);
+    debug("\r\nSPWF> WiFi HW fault error: %u\r\n", failure_nr);
 
     // This is most likely the best we can do to recover from this module hard fault
     _parser.set_timeout(SPWF_HF_TIMEOUT);
@@ -1036,7 +1044,7 @@ void SPWFSAxx::_server_gone_handler(void)
 
     if(!(_parser.recv(SPWFXX_RECV_SOCKET_CLOSED, &spwf_id) && _recv_delim_lf())) {
 #ifndef NDEBUG
-        error("\r\nSPWFSAxx::%s failed!\r\n", __func__);
+        error("\r\nSPWF> SPWFSAxx::%s failed!\r\n", __func__);
 #endif
         goto _get_out;
     }
@@ -1095,7 +1103,7 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
         /* check if any packets are ready for us */
         for (struct packet **p = &_packets; *p; p = &(*p)->next) {
             if ((*p)->id == spwf_id) {
-                debug_if(_dbg_on, "\r\nRead done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
+                debug_if(_dbg_on, "\r\nSPWF> Read done on ID %d and length of packet is %d\r\n",spwf_id,(*p)->len);
                 struct packet *q = *p;
 
                 MBED_ASSERT(q->len > 0);
@@ -1104,7 +1112,7 @@ int32_t SPWFSAxx::recv(int spwf_id, void *data, uint32_t amount, bool datagram)
                     // will always consume a whole pending size
                     uint32_t ret;
 
-                    debug_if(_dbg_on, "%s():\t\t\t%d:%d (datagram)\r\n", __func__, spwf_id, q->len);
+                    debug_if(_dbg_on, "\r\nSPWF> %s():\t\t\t%d:%d (datagram)\r\n", __func__, spwf_id, q->len);
 
                     ret = (amount < q->len) ? amount : q->len;
                     memcpy(data, q+1, ret);
@@ -1169,7 +1177,7 @@ void SPWFSAxx::_process_winds(void) {
             }
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW01M1
             else {
-                debug_if(true, "%s():\t\tNo delimiters found!\r\n", __func__);
+                debug_if(true, "\r\nSPWF> %s():\t\tNo delimiters found!\r\n", __func__);
                 return; // no leading delimiters
             }
 #endif
@@ -1206,7 +1214,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
             MBED_ASSERT(pending == (int)wind_pending);
 #endif
         } else if(pending < 0) {
-            debug_if(true, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
+            debug_if(true, "\r\nSPWF> %s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
         }
     } else { // only read in already notified data
         pending = wind_pending = _get_pending_pkt_size(spwf_id);
@@ -1226,7 +1234,7 @@ int SPWFSAxx::_read_in_pkt(int spwf_id, bool close) {
                     MBED_ASSERT(wind_pending > 0);
                 }
             } else if(pending < 0) {
-                debug_if(true, "%s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
+                debug_if(true, "\r\nSPWF> %s(), #%d:`_read_len()` failed (%d)!\r\n", __func__, __LINE__, pending);
             }
         }
     }
