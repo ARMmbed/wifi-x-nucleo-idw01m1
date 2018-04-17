@@ -301,7 +301,7 @@ nsapi_error_t SpwfSAInterface::socket_close(void *handle)
 
     if(!_socket_is_open(internal_id)) return NSAPI_ERROR_NO_SOCKET;
 
-    if(this->_socket_has_connected(socket)) {
+    if(_socket_has_connected(socket)) {
         _spwf.setTimeout(SPWF_CLOSE_TIMEOUT);
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
@@ -339,7 +339,9 @@ nsapi_size_or_error_t SpwfSAInterface::_socket_recv(void *handle, void *data, un
 
     CHECK_NOT_CONNECTED_ERR();
 
-    if(!_socket_might_have_data(socket)) {
+    if(!_socket_has_connected(socket)) {
+        return NSAPI_ERROR_WOULD_BLOCK;
+    } else if(socket->no_more_data) {
         return 0;
     }
 
@@ -369,7 +371,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
 
     CHECK_NOT_CONNECTED_ERR();
 
-    if ((this->_socket_has_connected(socket)) && (socket->addr != addr)) {
+    if ((_socket_has_connected(socket)) && (socket->addr != addr)) {
         _spwf.setTimeout(SPWF_CLOSE_TIMEOUT);
         if (!_spwf.close(socket->spwf_id)) {
             return NSAPI_ERROR_DEVICE_ERROR;
@@ -379,7 +381,7 @@ nsapi_size_or_error_t SpwfSAInterface::socket_sendto(void *handle, const SocketA
     }
 
     _spwf.setTimeout(SPWF_CONN_SND_TIMEOUT);
-    if (!this->_socket_has_connected(socket)) {
+    if (!_socket_has_connected(socket)) {
         nsapi_error_t err = socket_connect(socket, addr);
         if (err < 0) {
             return err;
@@ -394,8 +396,6 @@ nsapi_size_or_error_t SpwfSAInterface::socket_recvfrom(void *handle, SocketAddre
     spwf_socket_t *socket = (spwf_socket_t*)handle;
     nsapi_error_t ret;
     SYNC_HANDLER;
-
-    CHECK_NOT_CONNECTED_ERR();
 
     ret = _socket_recv(socket, data, size, true);
     if (ret >= 0 && addr) {
