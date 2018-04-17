@@ -310,6 +310,9 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 {
     int trials;
 
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     //AT+S.SCFG=wifi_wpa_psk_text,%s
     if(!(_parser.send("AT+S.SCFG=wifi_wpa_psk_text,%s", passPhrase) && _recv_ok()))
     {
@@ -381,6 +384,9 @@ bool SPWFSAxx::connect(const char *ap, const char *passPhrase, int securityMode)
 
 bool SPWFSAxx::disconnect(void)
 {
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
 #if MBED_CONF_IDW0XX1_EXPANSION_BOARD == IDW04A1
     /*disable Wi-Fi device*/
     if(!(_parser.send("AT+S.WIFI=0") && _recv_ok()))
@@ -423,6 +429,9 @@ const char *SPWFSAxx::getIPAddress(void)
 {
     unsigned int n1, n2, n3, n4;
 
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     if (!(_parser.send("AT+S.STS=ip_ipaddr")
             && _parser.recv(SPWFXX_RECV_IP_ADDR, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
@@ -439,6 +448,9 @@ const char *SPWFSAxx::getIPAddress(void)
 const char *SPWFSAxx::getGateway(void)
 {
     unsigned int n1, n2, n3, n4;
+
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
 
     if (!(_parser.send("AT+S.STS=ip_gw")
             && _parser.recv(SPWFXX_RECV_GATEWAY, &n1, &n2, &n3, &n4)
@@ -457,6 +469,9 @@ const char *SPWFSAxx::getNetmask(void)
 {
     unsigned int n1, n2, n3, n4;
 
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     if (!(_parser.send("AT+S.STS=ip_netmask")
             && _parser.recv(SPWFXX_RECV_NETMASK, &n1, &n2, &n3, &n4)
             && _recv_ok())) {
@@ -474,6 +489,9 @@ int8_t SPWFSAxx::getRssi(void)
 {
     int ret;
 
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
+
     if (!(_parser.send("AT+S.PEERS=0,rx_rssi")
             && _parser.recv(SPWFXX_RECV_RX_RSSI, &ret)
             && _recv_ok())) {
@@ -487,6 +505,9 @@ int8_t SPWFSAxx::getRssi(void)
 const char *SPWFSAxx::getMACAddress(void)
 {
     unsigned int n1, n2, n3, n4, n5, n6;
+
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
 
     if (!(_parser.send("AT+S.GCFG=nv_wifi_macaddr")
             && _parser.recv(SPWFXX_RECV_MAC_ADDR, &n1, &n2, &n3, &n4, &n5, &n6)
@@ -510,6 +531,9 @@ nsapi_size_or_error_t SPWFSAxx::send(int spwf_id, const void *data, uint32_t amo
 {
     uint32_t sent = 0U, to_send;
     nsapi_size_or_error_t ret;
+
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
 
     _process_winds(); // perform async indication handling (to early detect eventually closed sockets)
 
@@ -721,6 +745,9 @@ void SPWFSAxx::_free_all_packets() {
 bool SPWFSAxx::close(int spwf_id)
 {
     bool ret = false;
+
+    BlockExecuter netsock_wa_obj(Callback<void()>(this, &SPWFSAxx::_unblock_event_callback),
+                                 Callback<void()>(this, &SPWFSAxx::_block_event_callback)); /* disable calling (external) callback in IRQ context */
 
     MBED_ASSERT(((unsigned int)spwf_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)); // `spwf_id` is valid
 

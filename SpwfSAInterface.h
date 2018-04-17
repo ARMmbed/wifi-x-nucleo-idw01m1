@@ -341,10 +341,6 @@ private:
         return (_socket_has_connected(sock) && !sock->server_gone);
     }
 
-    bool _socket_might_have_data(spwf_socket_t *sock) {
-        return (_socket_has_connected(sock) && !sock->no_more_data);
-    }
-
     bool _socket_is_open(int internal_id) {
         if(((unsigned int)internal_id) < ((unsigned int)SPWFSA_SOCKET_COUNT)) {
             return (_ids[internal_id].internal_id == internal_id);
@@ -364,13 +360,6 @@ private:
 
         spwf_socket_t &sock = _ids[internal_id];
         return (!sock.server_gone);
-    }
-
-    bool _socket_might_have_data(int internal_id) {
-        if(!_socket_is_still_connected(internal_id)) return false;
-
-        spwf_socket_t &sock = _ids[internal_id];
-        return (!sock.no_more_data);
     }
 
     void reset_credentials() {
