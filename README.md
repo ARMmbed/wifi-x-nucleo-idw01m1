@@ -59,3 +59,10 @@ Please make sure that you are using the latest firmware available for the expans
 The actual firmware `.bin` or `.hex` files can be found under 
 - [STSW-WIFI001](http://www.st.com/content/st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi001.html) _for what concerns expansion board_ X-NUCLEO-IDW01M1 _and under_
 - [STSW-WIFI004](http://www.st.com/content/st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi004.html) _when considering_ X-NUCLEO-IDW04A1.
+
+
+## Known limitations
+
+ * Like explained in issue [#11](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/issues/11), sockets might fail to close in case they are connected to a streaming server (e.g. a [RFC 864](https://tools.ietf.org/html/rfc864) test server).
+ * As highlighted by issue [#13](https://github.com/ARMmbed/wifi-x-nucleo-idw01m1/issues/13), the module FW limits the maximum segment size for TCP to 730 bytes, while the maximum UDP datagram length might even be further limited (but usually is also equal to 730 bytes).
+ 
