@@ -272,12 +272,12 @@ nsapi_error_t SpwfSAInterface::socket_bind(void *handle, const SocketAddress &ad
 }
 
 nsapi_error_t SpwfSAInterface::socket_listen(void *handle, int backlog)
-{      
+{
     return NSAPI_ERROR_UNSUPPORTED;
 }
 
 nsapi_error_t SpwfSAInterface::socket_accept(nsapi_socket_t server, nsapi_socket_t *handle, SocketAddress *address)
-{    
+{
     return NSAPI_ERROR_UNSUPPORTED;
 }
 

@@ -4,6 +4,14 @@
         "expansion-board":{
 	    "help": "Options are IDW01M1 and IDW04A1",
 	    "value": "IDW01M1"
+        },
+        "tx":{
+            "help": "TX pin for serial connection to external device",
+            "value": "NC"
+        },
+        "rx":{
+            "help": "RX pin for serial connection to external device",
+            "value": "NC"
         }
     }
 }
