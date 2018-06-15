@@ -32,7 +32,7 @@
   * <h2><center>&copy; COPYRIGHT 2016 STMicroelectronics</center></h2>
   ******************************************************************************
   */
-  
+
 #ifndef SPWFSA_INTERFACE_H
 #define SPWFSA_INTERFACE_H
 
@@ -82,7 +82,7 @@ public:
      * @param wakeup    Wakeup pin
      * @param reset     Reset pin
      */
-    SpwfSAInterface(PinName tx, PinName rx,
+    SpwfSAInterface(PinName tx = MBED_CONF_IDW0XX1_TX, PinName rx = MBED_CONF_IDW0XX1_RX,
                     PinName rts = SPWFSAXX_RTS_PIN, PinName cts = SPWFSAXX_CTS_PIN, bool debug = false,
                     PinName wakeup = SPWFSAXX_WAKEUP_PIN, PinName reset = SPWFSAXX_RESET_PIN);
 
