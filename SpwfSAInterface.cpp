@@ -38,19 +38,7 @@
 #include "BlockExecuter.h"
 
 #if MBED_CONF_RTOS_PRESENT
-static Mutex _spwf_mutex; // assuming a recursive mutex
-static void _spwf_lock() {
-    (void)(_spwf_mutex.lock());
-}
-static Callback<void()> _callback_spwf_lock(&_spwf_lock);
-
-static void _spwf_unlock() {
-    (void)(_spwf_mutex.unlock());
-}
-static Callback<void()> _callback_spwf_unlock(&_spwf_unlock);
-
-#define SYNC_HANDLER \
-        BlockExecuter sync_handler(_callback_spwf_unlock, _callback_spwf_lock)
+#define SYNC_HANDLER ScopedMutexLock sync_handler(_spwf_mutex)  // assuming a recursive mutex
 #else
 #define SYNC_HANDLER
 #endif
