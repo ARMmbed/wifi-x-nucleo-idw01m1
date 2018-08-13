@@ -498,3 +498,12 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
 
     return ret;
 }
+
+#if MBED_CONF_IDW0XX1_PROVIDE_DEFAULT
+
+WiFiInterface *WiFiInterface::get_default_instance() {
+    static SpwfSAInterface spwf(MBED_CONF_APP_WIFI_TX, MBED_CONF_APP_WIFI_RX);
+    return &spwf;
+}
+
+#endif

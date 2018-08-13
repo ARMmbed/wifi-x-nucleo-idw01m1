@@ -12,6 +12,10 @@
         "rx":{
             "help": "RX pin for serial connection to external device",
             "value": "NC"
+        },
+        "provide-default": {
+            "help": "Provide default WifiInterface. [true/false]",
+            "value": false
         }
     }
 }
