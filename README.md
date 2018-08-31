@@ -52,9 +52,13 @@ Beyond you can find the list of available configuration macros each with a short
 **Note**: if the values of both `SPWFSAXX_RTS_PIN` and `SPWFSAXX_CTS_PIN` are different from `NC`, hardware flow control - if available on your development board - will be enabled on the used UART device (provided you are using `mbed-os` version greater than or equal to `v5.7.0`).
 
 
-## Firmware upgrade
+## Module firmware
 
-Please make sure that you are using the latest firmware available for the expansion boards. For information on how to perform a FW upgrade you may refer to [X-CUBE-WIFI1](http://www.st.com/content/st_com/en/products/embedded-software/mcus-embedded-software/stm32-embedded-software/stm32cube-embedded-software-expansion/x-cube-wifi1.html), especially to document **"X-NUCLEO-IDW0xx1- FW upgrading over UART_v1.2.pdf"** which is contained within folder **"Documentation"** of the X-CUBE-WIFI1 software archive you need to download. 
+Please make sure that you are using the latest `major.minor` releases of the firmware available for the expansion boards as have been used for the development of this driver. The driver has been developed with the following FW versions installed:
+* for [X-NUCLEO-IDW01M1](http://www.st.com/content/st_com/en/products/ecosystems/stm32-open-development-environment/stm32-nucleo-expansion-boards/stm32-ode-connect-hw/x-nucleo-idw01m1.html): Version 3.5.3 (SPWF01S-170111-665d284)
+ * for [X-NUCLEO-IDW04A1](http://www.st.com/content/st_com/en/products/ecosystems/stm32-open-development-environment/stm32-nucleo-expansion-boards/stm32-ode-connect-hw/x-nucleo-idw04a1.html): Version 1.1.0 (SPWF04S-171117-0328fe3).
+
+Regarding information on how to perform a FW update you may refer to [X-CUBE-WIFI1](http://www.st.com/content/st_com/en/products/embedded-software/mcus-embedded-software/stm32-embedded-software/stm32cube-embedded-software-expansion/x-cube-wifi1.html), especially to document **"X-NUCLEO-IDW0xx1- FW upgrading over UART_v1.2.pdf"** which is contained within folder **"Documentation"** of the X-CUBE-WIFI1 software archive you need to download. 
 
 The actual firmware `.bin` or `.hex` files can be found under 
 - [STSW-WIFI001](http://www.st.com/content/st_com/en/products/embedded-software/wireless-connectivity-software/stsw-wifi001.html) _for what concerns expansion board_ X-NUCLEO-IDW01M1 _and under_
