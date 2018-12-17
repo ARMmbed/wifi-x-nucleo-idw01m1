@@ -143,6 +143,7 @@ nsapi_error_t SpwfSAInterface::disconnect(void)
     SYNC_HANDLER;
 
     _spwf.setTimeout(SPWF_DISCONNECT_TIMEOUT);
+    CHECK_NOT_CONNECTED_ERR();
 
     if (!_spwf.disconnect()) {
         return NSAPI_ERROR_DEVICE_ERROR;
@@ -493,7 +494,7 @@ nsapi_size_or_error_t SpwfSAInterface::scan(WiFiAccessPoint *res, unsigned count
     if(!_isInitialized)
     {
         nsapi_error_t err = disconnect();
-        if(err != NSAPI_ERROR_OK) return err;
+        if((err != NSAPI_ERROR_OK) && (err != NSAPI_ERROR_NO_CONNECTION)) return err;
     }
 
     return ret;
